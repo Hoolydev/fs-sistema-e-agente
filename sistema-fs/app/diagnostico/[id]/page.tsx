@@ -19,10 +19,10 @@ export default async function SavedDiagnosticPage({ params }: { params: Promise<
   const totals = summarize(report);
   return <Dashboard screen="diagnostico"><div className="diagnostic">
     <Link className="diag-text-button" href="/diagnostico">← Voltar ao acervo</Link>
-    <div className="diag-heading"><div><p className="diag-eyebrow">PARECER FS · DOCUMENTO SALVO</p><h1>{report.company.name}</h1><p>{formatCnpj(report.company.cnpj)} · Versão {report.version} · Data-base {new Date(report.generatedAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</p></div></div>
-    <div className="diag-company-actions"><a className="diag-button primary" href={`/api/documentos/${id}?download=1`}>Baixar parecer FS em PDF</a><a className="diag-button" href={`/api/documentos/${id}`} target="_blank" rel="noopener noreferrer">Abrir PDF para imprimir</a></div>
+    <div className="diag-heading diag-hero"><div><p className="diag-eyebrow">PARECER FS · DOCUMENTO SALVO</p><h1>{report.company.name}</h1><p>{formatCnpj(report.company.cnpj)} · Versão {report.version} · Data-base {new Date(report.generatedAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</p></div></div>
+    <div className="diag-company-actions"><a className="diag-button primary" href={`/api/documentos/${id}?download=1`} target="_blank" rel="noopener noreferrer">Baixar parecer FS em PDF</a><a className="diag-button" href={`/api/documentos/${id}`} target="_blank" rel="noopener noreferrer">Abrir PDF para imprimir</a></div>
     <div className="diag-kpis"><div className="diag-kpi debt-total"><div>Total em cobrança</div><strong>{money(totals.total)}</strong><small>Recorte das fontes na data-base</small></div><div className="diag-kpi"><div>Dívida ativa · PGFN</div><strong>{money(totals.pgfn)}</strong><small>{totals.count} inscrições incluídas</small></div><div className="diag-kpi"><div>Receita Federal</div><strong>{money(totals.rfb)}</strong><small>Valores a vencer apresentados separadamente</small></div></div>
-    <section className="diag-card"><h2>Síntese do levantamento</h2><p>{report.summary}</p><p>Documento para revisão técnica. Reabrir e baixar este parecer reutiliza a versão arquivada, sem nova consulta fiscal.</p></section>
+    <section className="diag-card diag-reading-summary"><h2>Síntese do levantamento</h2><p>{report.summary}</p><p>Documento para revisão técnica. Reabrir e baixar este parecer reutiliza a versão arquivada, sem nova consulta fiscal.</p></section>
     <FiscalOpinion report={report}/>
   </div></Dashboard>;
 }

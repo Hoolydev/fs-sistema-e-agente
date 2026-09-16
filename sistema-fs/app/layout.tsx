@@ -4,12 +4,13 @@ import { InstallApp } from "@/components/pwa/install-app";
 import "./responsive.css";
 import "./diagnostico.css";
 import "./comercial.css";
+import "./reading.css";
 
 export const metadata: Metadata = {
   title: "FS Soluções Tributárias | Gestão",
   description: "Sistema de gestão operacional da FS Soluções Tributárias.",
   manifest: "/manifest.webmanifest",
-  appleWebApp: { capable: true, title: "FS Diagnóstico", statusBarStyle: "default" },
+  appleWebApp: { capable: true, title: "FS Diagnóstico", statusBarStyle: "black-translucent" },
   robots: { index: false, follow: false },
   icons: {
     icon: "/favicon.svg",

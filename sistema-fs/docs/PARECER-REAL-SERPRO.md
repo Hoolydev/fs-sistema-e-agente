@@ -50,3 +50,11 @@ A tela de Diagnóstico abre com cabeçalho navy e formulário “Analisar uma em
 A busca por nome ou arquivo inclui os demais documentos do mesmo CNPJ. Empresas diferentes continuam separadas; o documento de homologação permanece identificado como teste. Não há limite visual de cinco documentos ocultando versões.
 
 O acervo se atualiza a cada 15 segundos quando a tela está visível, ao recuperar foco, ao voltar para a aba e ao recuperar conexão. Atualizações preservam a seleção do usuário, cancelam respostas antigas e não consultam provedores fiscais. O service worker continua sem cache de PDFs, dados fiscais ou sessões. Alterações de código exigem carregar a versão nova do aplicativo; a atualização automática trata a chegada de documentos ao acervo.
+
+## Leitura móvel e PDFs no iPhone
+
+A barra superior compartilhada dos módulos usa navy com ícones/textos claros. O cabeçalho do parecer salvo acompanha essa identidade. `app/reading.css` ajusta a leitura em tela: corpo do parecer em 16px no celular, tabelas em 14px com rolagem própria e indicadores empilhados nas telas estreitas. O PDF canônico e os valores arquivados não foram alterados por esta mudança de apresentação.
+
+Em telas móveis ou dispositivos com ponteiro de toque, “Abrir PDF” é um link nativo com `target="_blank"` e `rel="noopener noreferrer"`. Não usa o iframe do acervo. Downloads também abrem separadamente para evitar que o visualizador do iOS substitua a tela do PWA. No desktop, permanece a prévia lateral. O Comercial segue a mesma regra de acesso separado no celular. O comportamento foi verificado em larguras móveis; a escolha entre aba e visualizador externo é do navegador/iOS.
+
+Etapa seguinte solicitada: homologar a recuperação do acervo pelo agente Contabo/WhatsApp, escolhendo empresa e documento existente, com autorização do solicitante e sem nova consulta fiscal. Esta mudança visual não ativa fila ou envio real.

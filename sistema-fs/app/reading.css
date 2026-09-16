@@ -1,0 +1,38 @@
+/* Shared app chrome. Portal menus retain their own light background/foreground. */
+header.topbar{background:#10283d;border-bottom:1px solid #355064;color:#f5f7fa;padding-top:env(safe-area-inset-top);height:calc(77px + env(safe-area-inset-top))}
+.topbar .breadcrumb-label,.topbar .user-menu small{color:#bbcbd7}.topbar .breadcrumb-label strong,.topbar .user-menu strong{color:#f5f7fa}
+.topbar .topbar-left>[data-slot=sidebar-trigger],.topbar .notification-button,.topbar .global-search,.topbar .user-menu>svg{color:#d8e4ec}
+.topbar .global-search input{color:#fff}.topbar .global-search input::placeholder{color:#bbcbd7;opacity:1}.topbar .global-search kbd{color:#bbcbd7;border-color:#526b7e}.topbar .topbar-divider{background:#3a5266}.topbar .notification-button>span{border-color:#10283d}
+.topbar .topbar-left>[data-slot=sidebar-trigger]:hover,.topbar .notification-button:hover,.topbar .user-menu:hover{background:#29485f;border-radius:6px}.topbar button:focus-visible,.topbar input:focus-visible{outline:2px solid #dec898;outline-offset:3px}
+.fs-company-actions .fs-pdf-external{display:none}
+.diag-company-actions{flex-wrap:wrap;margin-bottom:20px}.diag-company-actions a{white-space:normal;text-align:center}
+.diag-reading-summary{line-height:1.75}.diag-reading-summary h2{font-size:19px;font-weight:600;margin-bottom:12px}.diag-reading-summary p{font-size:16px;margin-bottom:12px}
+.diagnostic>.diag-text-button{margin-bottom:16px;font-size:14px;min-height:44px}
+@media screen{
+ .diagnostic .fiscal-opinion .op-text{font-size:15px;line-height:1.8}
+ .diagnostic .fiscal-opinion .op-table-scroll table{font-size:13px;line-height:1.65}
+ .diagnostic .fiscal-opinion .op-callout p,.diagnostic .fiscal-opinion .op-chart p{font-size:14px;line-height:1.75}
+ .diagnostic .fiscal-opinion .op-callout h4,.diagnostic .fiscal-opinion .op-chart h4{font-size:13px}
+ .diagnostic .fiscal-opinion .op-legend li{font-size:12px}.diagnostic .fiscal-opinion .op-legend small{font-size:12px}
+ .diagnostic .fiscal-opinion .op-brand>div,.diagnostic .fiscal-opinion .op-footer{font-size:11px}
+ .diagnostic .fiscal-opinion .op-navigation a{font-size:13px;min-height:44px;display:flex;align-items:center}
+ .diagnostic .fiscal-opinion .op-kpis span{font-size:11px}.diagnostic .fiscal-opinion .op-kpis small{font-size:12px}
+ .diagnostic .fiscal-opinion .op-demo-label{font-size:12px}.diagnostic .fiscal-opinion .op-title p{font-size:13px}
+}
+@media(max-width:767px){
+ header.topbar{height:calc(66px + env(safe-area-inset-top));padding-top:env(safe-area-inset-top)}
+ .diagnostic .diag-heading h1{font-size:26px;line-height:1.35;letter-spacing:-.5px}.diagnostic .diag-heading>div>p:last-child{font-size:15px;line-height:1.65}
+ .diagnostic .diag-eyebrow{font-size:12px!important;line-height:1.6}.diagnostic .diag-chip{font-size:13px;line-height:1.5}
+ .diagnostic .diag-button{font-size:14px;min-height:46px}.diagnostic .diag-search-label label{font-size:16px}.diagnostic .diag-search-label small{font-size:14px;line-height:1.6}
+ .fs-library .diag-card-title p{font-size:14px;line-height:1.65}.fs-library h2{font-size:21px;line-height:1.4}.fs-company-heading h3{font-size:16px}.fs-company-heading p{font-size:14px}.fs-company-counts span{font-size:12px}
+ .fs-file-picker label,.fs-preview-controls>label{font-size:14px}.fs-company-file strong{font-size:15px}.fs-company-file p{font-size:14px;line-height:1.6}.fs-company-file small,.fs-library-foot,.fs-library-sync{font-size:12px;line-height:1.6}
+ .diagnostic .diag-kpi>div{font-size:15px}.diagnostic .diag-kpi>small{font-size:13px;line-height:1.6}.diagnostic .diag-kpi>strong{font-size:26px;white-space:normal;overflow-wrap:anywhere}.diagnostic .diag-kpi:first-child>strong{font-size:32px}
+ .diagnostic .diag-reading-summary p{font-size:16px;line-height:1.8}.diagnostic .diag-company-actions{display:grid;grid-template-columns:1fr;width:100%;gap:12px;margin:18px 0}
+ .diagnostic .fiscal-opinion .op-text{font-size:16px}.diagnostic .fiscal-opinion .op-table-scroll table{font-size:14px;min-width:640px}.diagnostic .fiscal-opinion .op-heading{font-size:18px!important;line-height:1.5}
+ .diagnostic .fiscal-opinion .op-callout p,.diagnostic .fiscal-opinion .op-chart p{font-size:15px}.diagnostic .fiscal-opinion .op-callout h4,.diagnostic .fiscal-opinion .op-chart h4{font-size:14px;line-height:1.5}
+ .diagnostic .fiscal-opinion .op-legend{min-width:0}.diagnostic .fiscal-opinion .op-legend li,.diagnostic .fiscal-opinion .op-legend small{font-size:13px}.diagnostic .fiscal-opinion .op-score-row{flex-wrap:wrap}
+ .diagnostic .fiscal-opinion .op-kpis strong{font-size:22px}.diagnostic .fiscal-opinion .op-kpis span{font-size:12px;min-height:0;margin-bottom:8px}.diagnostic .fiscal-opinion .op-bar-row{font-size:13px}.diagnostic .fiscal-opinion .op-bar-row strong{font-size:13px}
+}
+@media(max-width:480px){.diagnostic .diag-kpis,.diagnostic .fiscal-opinion .op-kpis{grid-template-columns:1fr}.diagnostic .diag-kpi{padding:20px}.diagnostic .diag-kpi>strong{white-space:nowrap;font-size:28px}}
+/* Native links preserve the PWA screen when iOS hands a PDF to its viewer. */
+@media(max-width:900px),(pointer:coarse){.fs-company-actions .fs-pdf-desktop,.crm-pdf .fs-pdf-desktop,.fs-document-preview .fs-pdf-frame{display:none}.fs-company-actions .fs-pdf-external{display:inline-flex}}
