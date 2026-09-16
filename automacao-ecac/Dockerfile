@@ -22,6 +22,7 @@ COPY --chown=pwuser:pwuser --from=build /app/package.json /app/pnpm-lock.yaml ./
 COPY --chown=pwuser:pwuser --from=build /app/node_modules ./node_modules
 COPY --chown=pwuser:pwuser --from=build /app/dist ./dist
 COPY --chown=pwuser:pwuser migrations ./migrations
+COPY --chown=pwuser:pwuser scripts/*.mjs ./scripts/
 COPY scripts/start-browser-session.sh /usr/local/bin/start-browser-session
 COPY scripts/cdp-proxy.mjs /usr/local/lib/cdp-proxy.mjs
 RUN chmod 0755 /usr/local/bin/start-browser-session

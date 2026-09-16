@@ -1,5 +1,7 @@
 # Contexto consolidado — 16/09/2026
 
+> Atualização posterior: consulta real SITFIS e Dívida Ativa homologada; PDF RFB disponível no acervo. Worker configurado, fila automática pausada e botão de nova análise ainda pendente. Ver [homologação Serpro](HOMOLOGACAO-SERPRO.md).
+
 > Atualização: credenciais dos dois produtos Serpro recebidas e autenticação validada na VPS. Consultas reais ainda não homologadas. Ver [estado da integração Serpro](../automacao-ecac/docs/SERPRO-CREDENCIAIS-VALIDADAS.md); esta atualização substitui os trechos históricos que indicam ausência de contratação/chaves.
 
 Este documento prevalece sobre descrições históricas de etapas anteriores. Ele registra o estado conhecido, não promete resultados fiscais nem substitui verificação do ambiente.

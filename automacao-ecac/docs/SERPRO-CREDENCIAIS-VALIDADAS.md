@@ -1,5 +1,7 @@
 # Credenciais Serpro e autenticação — 16/09/2026
 
+> Atualização posterior: consulta real SITFIS e Dívida Ativa homologada; PDF RFB disponível no acervo. Worker configurado, fila automática pausada e botão de nova análise ainda pendente. Ver [homologação Serpro](../../docs/HOMOLOGACAO-SERPRO.md).
+
 ## Estado verificado
 
 O usuário informou contratação dos produtos Integra Contador e Consulta Dívida Ativa (direto na faixa). As credenciais foram instaladas em arquivos privados no computador de desenvolvimento e em `/opt/fs-automacao-ecac/secrets/` na VPS. Nenhum valor de credencial ou token consta no repositório.
