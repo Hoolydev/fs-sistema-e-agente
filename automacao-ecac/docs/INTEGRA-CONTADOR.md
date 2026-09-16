@@ -1,5 +1,7 @@
 # Integra Contador — ativação FS
 
+> Atualização: credenciais dos dois produtos Serpro recebidas e autenticação validada na VPS. Consultas reais ainda não homologadas. Ver [estado da integração Serpro](SERPRO-CREDENCIAIS-VALIDADAS.md); esta atualização substitui os trechos históricos que indicam ausência de contratação/chaves.
+
 Estado: adaptador SITFIS implementado e testado com respostas simuladas. Contratação, credenciais e homologação real pendentes. Não foi realizada consulta fiscal real via Serpro.
 
 ## Contratação

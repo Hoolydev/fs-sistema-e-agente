@@ -1,5 +1,7 @@
 # FS — Sistema e agente de diagnóstico tributário
 
+> Atualização: credenciais dos dois produtos Serpro recebidas e autenticação validada na VPS. Consultas reais ainda não homologadas. Ver [estado da integração Serpro](automacao-ecac/docs/SERPRO-CREDENCIAIS-VALIDADAS.md); esta atualização substitui os trechos históricos que indicam ausência de contratação/chaves.
+
 Código e contexto para continuar o projeto em outro computador. Estado consolidado em **16/09/2026**.
 
 - **Sistema:** https://app.fssolucoestributarias.com.br
