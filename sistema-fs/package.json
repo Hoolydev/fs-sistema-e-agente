@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test:diagnostico": "tsx --test tests/diagnostico.test.ts",
-    "test:comercial": "tsx --test tests/comercial.test.ts"
+    "test:comercial": "tsx --test tests/comercial.test.ts",
+    "parecer:gerar": "tsx scripts/generate-fs-report.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

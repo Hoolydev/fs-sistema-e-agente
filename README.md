@@ -14,6 +14,10 @@ Código e contexto para continuar o projeto em outro computador. Estado consolid
 3. Consulte [a operação e os ambientes publicados](docs/OPERACAO.md).
 4. Para continuar com Claude/Codex, use [a instrução de retomada](docs/RETOMADA-IA.md).
 
+## Padronização no Claude
+
+A raiz contém `CLAUDE.md` e a skill `.claude/skills/parecer-fs/SKILL.md`. Leia [como instalar e orientar o Claude](docs/CLAUDE-PARECER-FS.md). O comando `parecer:gerar` exporta o PDF pelo mesmo gerador do sistema.
+
 ## Organização
 
 | Pasta | Conteúdo |
