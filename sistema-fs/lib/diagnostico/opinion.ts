@@ -85,15 +85,16 @@ export function buildOpinion(input: DiagnosticReport) {
     { title: "PARTE I - DIAGNÓSTICO DO PASSIVO", subtitle: "Identificação, composição e distribuição dos débitos", blocks: [
       h("1. Identificação"), t(["Informação", "Levantamento"], [
         ["Razão social / CNPJ", `${report.company.name}\n${formatCnpj(report.company.cnpj)}`], ["Regime / enquadramento", report.company.regime], ["Passivo inscrito (PGFN)", `${money(debtTotal)} · ${m.totals.count} inscrições`],
-        ["Com referência judicial", `${judicialDebts.length} inscrições · ${money(judicialDebts.reduce((sum, d) => sum + d.total, 0))}`],
+        ["Com referência judicial informada", judicialDebts.length ? `${judicialDebts.length} inscrições · ${money(judicialDebts.reduce((sum, d) => sum + d.total, 0))}` : "Não informada nas fontes; não comprova ausência de execução"],
         ["Receita Federal / federal total", `${money(m.totals.rfb)} / ${money(m.totals.total)}`], ["Classificação CAPAG", report.capag.rating ?? "Não informada"],
         ["Objeto do parecer", "Diagnóstico do passivo, simulação por inscrição, desembolso e frentes de regularização."], ["Data-base / natureza", `${shortDate(report.generatedAt)} · ${report.mode === "demo" ? "Demonstração com dados fictícios" : "Análise técnica para revisão"}`],
       ]),
+      p(report.summary), p(report.scope),
       h("1.1. Pendências na Receita Federal"), t(["Referência", "Tributo / período", "Situação", "Total"], report.debts.filter(d => d.origin === "RFB").map(d => [d.id, `${d.tax} · ${d.period}`, d.status, money(d.total)])),
       h("2. Composição do débito"), t(["Componente PGFN", "Valor", "% do total"], [...m.composition.map((v, i) => [compNames[i], money(v), percent(v !== null && debtTotal ? v / debtTotal * 100 : null)]), ["TOTAL CONSOLIDADO", money(debtTotal), debtTotal ? "100,00%" : "Não informado"]]),
       p("A base potencial de redução é composta pelos acréscimos elegíveis. O principal permanece preservado no cálculo. Componentes ausentes impedem a simulação da inscrição correspondente."),
       h("3. Composição por natureza, tributo e período"),
-      t(["Natureza", "Inscrições", "Valor", "% do total"], aggregate(d => d.tax === "Simples Nacional" ? "Simples Nacional" : "Tributária")),
+      t(["Natureza", "Inscrições", "Valor", "% do total"], aggregate(d => /simples/i.test(d.tax) ? "Simples Nacional" : "Tributária")),
     ] },
     { title: "PARTE I - DETALHAMENTO", subtitle: "Todas as inscrições, pendências na Receita Federal e referências", blocks: [
       h("3.1. Distribuição por tributo"), t(["Tributo", "Inscrições", "Valor", "% PGFN"], aggregate(d => d.tax)),
@@ -128,7 +129,7 @@ export function buildOpinion(input: DiagnosticReport) {
         ["Hipótese alternativa", installmentText(installments(m.entry.total, s.alternativeEntryMonths)), installmentText(installments(m.balance.total, s.alternativeBalanceMonths)), `${s.alternativeEntryMonths + s.alternativeBalanceMonths} meses`],
       ] : [["Pendente", "Não simulado", "Não simulado", "Não definido"]]),
       h("9.1. Quadro por categoria"), t(["Categoria", "Original", "Após desconto", "Entrada", "Saldo"], [["Inscrições incluídas na simulação", money(debtTotal), money(m.final), money(m.entry?.total ?? null), money(m.balance?.total ?? null)], ["Débitos RFB (fora da simulação)", money(m.totals.rfb), "Não simulado", "Não simulado", "Não simulado"]]),
-      p("Este exemplo não informa enquadramento previdenciário específico. Quando houver créditos com limites de prazo próprios, eles devem ser separados e simulados em planos compatíveis; não se estende automaticamente o prazo geral a todas as naturezas."),
+      p("Este levantamento não confirma enquadramento previdenciário específico. Quando houver créditos com limites de prazo próprios, eles devem ser separados e simulados em planos compatíveis; não se estende automaticamente o prazo geral a todas as naturezas."),
       h("9.2. Fluxo nominal por fase"), t(["Fase", "Período", "Parcela e ajuste final"], scheduleRows),
       call("Critério de decisão", "Comparar a parcela com o caixa disponível após obrigações operacionais. Prazo longo e redução nominal não comprovam sustentabilidade. A entrada integra o valor final, não é acrescentada novamente ao total.", "green"),
     ] },
@@ -169,5 +170,8 @@ export function buildOpinion(input: DiagnosticReport) {
       p(`Goiânia, ${shortDate(report.generatedAt)}.\nFS Soluções Tributárias · Assessoria tributária e planejamento fiscal\n${report.id} · Versão ${report.version}`),
     ] },
   ];
+  for (const supplement of report.supplements ?? []) {
+    pages.push({ title: "EVIDÊNCIAS COMPLEMENTARES", subtitle: supplement.title, blocks: [p(supplement.note), t(supplement.headers, supplement.rows)] });
+  }
   return { report, metrics: m, pages };
 }

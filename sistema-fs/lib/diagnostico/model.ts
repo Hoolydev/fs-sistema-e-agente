@@ -25,6 +25,7 @@ export const reportSchema = z.object({
   capag: z.object({ rating: text.nullable(), amount: amount.nullable(), note: text }),
   sections: z.array(z.object({ id: text, title: text, content: text })),
   opinion: opinionSchema.optional(),
+  supplements: z.array(z.object({ title: text, note: text, headers: z.array(text).min(1).max(8), rows: z.array(z.array(text)) })).optional(),
   pending: z.array(text), recommendations: z.array(text), conclusion: text,
 });
 export type DiagnosticReport = z.infer<typeof reportSchema>;
@@ -51,6 +52,9 @@ export function validateReport(value: unknown): DiagnosticReport {
     if (report.sources.find(s => s.id === debt.sourceId)?.status === "pendente") throw new Error("Dívida vinculada a uma fonte ainda pendente.");
     const parts = [debt.principal, debt.fine, debt.interest, debt.charges];
     if (parts.every(n => n !== null) && parts.reduce<number>((s, n) => s + (n ?? 0), 0) !== debt.total) throw new Error("Composição divergente do valor total.");
+  }
+  for (const supplement of report.supplements ?? []) {
+    if (supplement.rows.some(row => row.length !== supplement.headers.length)) throw new Error("Tabela complementar inconsistente.");
   }
   const sum = report.debts.reduce((total, debt) => total + debt.total, 0);
   if (!Number.isSafeInteger(sum)) throw new Error("Soma dos débitos excede a precisão suportada.");

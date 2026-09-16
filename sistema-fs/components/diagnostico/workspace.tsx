@@ -14,7 +14,7 @@ const date = (value: string) => new Intl.DateTimeFormat("pt-BR", { dateStyle: "s
 export default function DiagnosticWorkspace() {
   const [tab, setTab] = useState("Visão geral");
   const [cnpj, setCnpj] = useState("");
-  const [reportVisible, setReportVisible] = useState(true);
+  const [reportVisible, setReportVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
@@ -51,14 +51,14 @@ export default function DiagnosticWorkspace() {
   const filtered = report.debts.filter(d => d.origin === (tab === "Receita Federal" ? "RFB" : "PGFN") && `${d.id} ${d.tax} ${d.period}`.toLowerCase().includes(query.toLowerCase()) && (status === "Todas as situações" || d.status === status));
 
   return <div className="diagnostic">
-    <div className="diag-heading"><div><p className="diag-eyebrow">INTELIGÊNCIA TRIBUTÁRIA</p><h1>Diagnóstico da empresa</h1><p>Do levantamento dos débitos à próxima decisão.</p></div><span className="diag-chip"><span /> Serpro: ativação pendente</span></div>
+    <div className="diag-heading"><div><p className="diag-eyebrow">INTELIGÊNCIA TRIBUTÁRIA</p><h1>Diagnóstico da empresa</h1><p>Do levantamento dos débitos à próxima decisão.</p></div><span className="diag-chip"><span /> Novas consultas: em homologação</span></div>
     <DocumentLibrary compact/>
     <form className="diag-search" onSubmit={consult}>
       <div className="diag-search-label"><Building2 size={21}/><div><label htmlFor="analysis-cnpj">Analisar uma empresa</label><small>Informe o CNPJ do cliente para iniciar o levantamento.</small></div></div>
       <div className="diag-search-controls"><input id="analysis-cnpj" value={cnpj} onChange={e => { setCnpj(e.target.value); setError(""); }} placeholder="00.000.000/0001-00" maxLength={18} autoComplete="off" aria-describedby={error ? "diagnostic-error" : undefined}/><button className="diag-button primary" disabled={loading} type="submit">{loading ? <LoaderCircle className="spin" size={16}/> : <Search size={16}/>} {loading ? "Verificando…" : "Analisar CNPJ"}</button></div>
     </form>
     {error && <div role="alert" className="diag-alert" id="diagnostic-error"><Info size={19}/><p>{error}</p><button onClick={() => setError("")} aria-label="Fechar aviso"><X size={16}/></button></div>}
-    {!reportVisible ? <div className="diag-empty"><FileText size={36}/><h2>{loading ? "Verificando disponibilidade" : "Consulta aguardando ativação"}</h2><p>O diagnóstico real aparecerá aqui após a conexão com as fontes fiscais. Nenhum dado demonstrativo será atribuído ao CNPJ informado.</p><button className="diag-button" onClick={restoreDemo} disabled={loading}>Explorar diagnóstico demonstrativo <ArrowRight size={16}/></button></div> : <>
+    {!reportVisible ? <div className="diag-empty"><FileText size={36}/><h2>{loading ? "Verificando disponibilidade" : "Abra um diagnóstico do acervo"}</h2><p>Busque a empresa acima e clique em Ver diagnóstico para abrir o parecer salvo, consultar os indicadores e baixar o PDF FS. Novas consultas pelo aplicativo estão em homologação.</p><button className="diag-button" onClick={restoreDemo} disabled={loading}>Explorar diagnóstico demonstrativo <ArrowRight size={16}/></button></div> : <>
       <div className="diag-demo-banner"><Info size={16}/><p><strong>Demonstração do sistema.</strong> Empresa, valores e inscrições fictícios. Nenhuma consulta real foi realizada.</p></div>
       <section className="diag-company"><div className="diag-company-icon"><Building2 size={23}/></div><div className="diag-company-name"><h2>{report.company.name}</h2><p>CNPJ ilustrativo {formatCnpj(report.company.cnpj)} <span>•</span> Referência {date(report.generatedAt)}</p></div><div className="diag-company-actions"><button className="diag-button" onClick={() => setTab("Parecer completo")}><FileText size={16}/> Ver parecer</button><button className="diag-button primary" onClick={download} disabled={pdfBusy}>{pdfBusy ? <LoaderCircle className="spin" size={16}/> : <ArrowDownToLine size={16}/>} {pdfBusy ? "Gerando PDF…" : "Baixar PDF"}</button></div></section>
       <div className="diag-tabs" role="tablist" aria-label="Áreas do diagnóstico">{tabs.map((name, i) => <button key={name} role="tab" id={`diag-tab-${i}`} aria-controls="diag-tab-panel" aria-selected={tab === name} className={tab === name ? "active" : ""} onClick={() => { setTab(name); setQuery(""); setStatus("Todas as situações"); }} onKeyDown={e => { if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return; e.preventDefault(); const next = e.key === "Home" ? 0 : e.key === "End" ? tabs.length - 1 : (i + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length; setTab(tabs[next]); setQuery(""); setStatus("Todas as situações"); document.getElementById(`diag-tab-${next}`)?.focus(); }} tabIndex={tab === name ? 0 : -1}>{name}</button>)}</div>

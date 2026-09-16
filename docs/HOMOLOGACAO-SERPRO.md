@@ -44,3 +44,7 @@ O PDF oficial da Receita aparece em Diagnóstico → Acervo compartilhado e em D
 - O Dockerfile passou a incluir os scripts `.mjs` em builds futuros. Na homologação corrente, os scripts foram copiados/montados no contêiner existente; a imagem não foi reconstruída só para incluí-los.
 
 Não imprimir as fontes JSON/PDF, tokens, senhas ou `.env` em logs. A guarda por run-id é local ao volume: preservar esse volume e verificar evidências antes de decidir por uma nova consulta.
+
+## Parecer canônico posterior
+
+As evidências já coletadas foram consolidadas em parecer FS real: tela privada `/diagnostico/:documentId`, PDF arquivado e disponível ao agente, identidade navy/dourado e 17 seções preservadas. Componentes ausentes não foram inventados. Os quadros complementares separam cobrança, valores a vencer e inscrições extintas. O PDF SITFIS permanece como documento de apoio. Ver `sistema-fs/docs/PARECER-REAL-SERPRO.md`. A fila e novas consultas continuam em homologação.

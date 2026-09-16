@@ -22,7 +22,7 @@ npm --prefix sistema-fs run parecer:gerar -- --input /caminho/privado/relatorio.
 O comando valida o JSON, usa a logo FS e chama `lib/diagnostico/pdf.ts`, compartilhado com o sistema. Ele exige fontes RFB/PGFN identificadas, impede demonstração como consulta real e grava recibo `.fs.json` com hashes. O recibo comprova o arquivo/gerador utilizados, **não** a veracidade fiscal nem aprovação técnica.
 
 6. Abra o PDF e confira marca, CNPJ, indicadores, todas as inscrições, tabelas, quebras de página e seções. Faça também a conciliação com as fontes; validação estrutural não confere documentos automaticamente. Falha de geração/validação interrompe a emissão: corrija os dados, não troque de gerador.
-7. Entregue o PDF e informe versão, data-base e pendências. Arquive no sistema pelo mecanismo autorizado existente; não invente URL pública. Se não houver integração configurada, diga que o arquivo está local e o arquivamento está pendente.
+7. Para arquivar uma nova emissão real com tela e PDF vinculados, use `POST /api/agent/reports` com `{ externalId, report }` e autenticação própria do agente. O servidor gera o mesmo PDF canônico e retorna o caminho privado do diagnóstico. Veja `sistema-fs/docs/PARECER-REAL-SERPRO.md`. Não substituir esse fluxo pelo envio isolado do extrato SITFIS. Entregue o PDF e informe versão, data-base e pendências. Arquive no sistema pelo mecanismo autorizado existente; não invente URL pública. Se não houver integração configurada, diga que o arquivo está local e o arquivamento está pendente.
 
 ## Forma que deve permanecer
 

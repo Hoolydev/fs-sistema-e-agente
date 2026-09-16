@@ -10,5 +10,5 @@ export async function POST(request: Request) {
   if (typeof raw !== "string" || raw.length > 30 || !isValidCnpj(normalizeCnpj(raw))) return NextResponse.json({ code: "INVALID_CNPJ", message: "Informe um CNPJ válido, incluindo os dígitos verificadores." }, { status: 422, headers });
   // Fail closed: there is no private-data endpoint until identity, company access,
   // the shared queue and the contracted providers are wired together.
-  return NextResponse.json({ code: "PROVIDER_NOT_READY", message: "As consultas reais ainda não estão disponíveis. A ativação depende da contratação do Serpro, das autorizações da empresa e da configuração do acesso da equipe. Nenhuma consulta foi realizada ou cobrada." }, { status: 503, headers });
+  return NextResponse.json({ code: "PROVIDER_NOT_READY", message: "As consultas reais ainda não estão disponíveis. O fluxo automático pelo aplicativo está em homologação. Os pareceres já elaborados estão disponíveis no acervo. Nenhuma consulta foi realizada ou cobrada." }, { status: 503, headers });
 }

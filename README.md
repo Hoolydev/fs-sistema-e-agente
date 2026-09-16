@@ -1,5 +1,7 @@
 # FS — Sistema e agente de diagnóstico tributário
 
+> Atualização: parecer real FS emitido a partir das evidências Serpro já coletadas, com tela privada e PDF no mesmo template. Acervo diferencia parecer de documento de apoio. [Fluxo canônico](sistema-fs/docs/PARECER-REAL-SERPRO.md). Novas consultas pelo PWA e emissão automática pelo worker ainda estão em homologação.
+
 > Atualização posterior: consulta real SITFIS e Dívida Ativa homologada; PDF RFB disponível no acervo. Worker configurado, fila automática pausada e botão de nova análise ainda pendente. Ver [homologação Serpro](docs/HOMOLOGACAO-SERPRO.md).
 
 > Atualização: credenciais dos dois produtos Serpro recebidas e autenticação validada na VPS. Consultas reais ainda não homologadas. Ver [estado da integração Serpro](automacao-ecac/docs/SERPRO-CREDENCIAIS-VALIDADAS.md); esta atualização substitui os trechos históricos que indicam ausência de contratação/chaves.

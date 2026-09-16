@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { jsPDF } from "jspdf";
 import { autoTable } from "jspdf-autotable";
 import { money, type DiagnosticReport } from "./model";
@@ -7,6 +8,8 @@ import { buildOpinion, percent, shortDate, type OpinionBlock } from "./opinion";
 export function generateDiagnosticPdf(input: DiagnosticReport, logo: Uint8Array): ArrayBuffer {
   const data = buildOpinion(input), { report, metrics: m } = data;
   const doc = new jsPDF({ unit: "mm", format: "a4", compress: true });
+  doc.setCreationDate(new Date(report.generatedAt));
+  doc.setFileId(createHash("sha256").update(JSON.stringify(report)).digest("hex").slice(0, 32));
   const navy = "#10283d", gold = "#b59459", green = "#2e916e", gray = "#5c6d79";
   const left = 14, width = 182, bottom = 277;
   let y = 38;
