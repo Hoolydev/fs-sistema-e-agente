@@ -1,0 +1,16 @@
+node_modules
+.next
+dist
+.sites-runtime
+.wrangler
+.openai
+.git
+*.tsbuildinfo
+.env*
+*.pfx
+*.p12
+*.key
+*.pem
+outputs
+
+.local

@@ -1,0 +1,7 @@
+# Instrução para retomar com Claude ou Codex
+
+Cole no terminal do assistente, dentro do clone:
+
+> Estamos continuando o sistema e o agente interno da FS Soluções Tributárias. Leia AGENTS.md, README.md, docs/CONTEXTO-ATUAL.md, docs/NOVO-COMPUTADOR.md e docs/OPERACAO.md. Inspecione o código e o git status antes de editar. O sistema Next.js está em sistema-fs, publicado em app.fssolucoestributarias.com.br no projeto Vercel holy-devops/fs-solucoes-sistema. O agente central fica em automacao-ecac; o conector Mac/ponte e pipeline adicional estão em conector-mac. Comece instalando dependências e validando localhost:3100 com banco de desenvolvimento. Não remova o login, não use Sites, não altere o site institucional nem publique credenciais. Preserve o template de parecer FS, indicadores e quatro partes/17 seções. O acervo é compartilhado com o agente: reenviar um PDF deve buscar o existente, nunca refazer análise por falha de busca. As consultas fiscais reais e o roteamento WhatsApp/Mac precisam de homologação; não confunda demonstração com resultado real. Recupere segredos pelos ambientes privados, sem exibi-los. Depois dos testes, informe o estado verificado e prossiga com a próxima demanda do usuário.
+
+Este repositório contém contexto técnico consolidado; não contém a conversa inteira, tokens ou documentos privados. O histórico de produto em documentos antigos pode ter sido substituído por decisões posteriores. O comando acima não autoriza envio de mensagens, consultas pagas ou mudanças destrutivas fora da solicitação atual.

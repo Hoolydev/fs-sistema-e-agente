@@ -1,0 +1,14 @@
+# Usar com docker-compose.prod.yml, sem docker-compose.cert.yml.
+# A ativação é separada da instalação: SERPRO_ENABLED=false não consulta a API.
+services:
+  worker:
+    environment:
+      FISCAL_DATA_PROVIDER: serpro
+      SERPRO_ENABLED: ${SERPRO_ENABLED:-false}
+      ECAC_CDP_URL: ""
+      CERT_PFX_PATH: /run/secrets/serpro/certificate.pfx
+      CERT_PFX_PASSPHRASE_FILE: /run/secrets/serpro/passphrase
+      SERPRO_CONSUMER_KEY_FILE: /run/secrets/serpro/consumer-key
+      SERPRO_CONSUMER_SECRET_FILE: /run/secrets/serpro/consumer-secret
+    volumes:
+      - ./secrets/serpro:/run/secrets/serpro:ro

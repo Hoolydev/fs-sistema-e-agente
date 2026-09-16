@@ -1,0 +1,221 @@
+/* ==========================================================================
+   PARECER / DIAGNÓSTICO FISCAL — folha de estilo mestre
+   Alvo: WeasyPrint (A4 retrato). Não alterar valores de paleta e escala:
+   é o que dá a identidade do documento.
+   ========================================================================== */
+
+:root{
+  --verde:        #12233f;   /* faixas de PARTE, cabeçalho de tabela, títulos */
+  --verde-claro:  #12233f;   /* números positivos, callout OK */
+  --dourado:      #B8912F;   /* réguas, subtítulos de subseção, card destaque */
+  --dourado-bg:   #FBF6E9;
+  --vermelho:     #A8322A;   /* alerta duro, valores críticos */
+  --vermelho-bg:  #FBEFEC;
+  --ambar:        #B07A22;
+  --ambar-bg:     #FDF7E9;
+  --verde-bg:     #F1F7F3;
+  --texto:        #23272A;
+  --texto-fraco:  #5C6469;
+  --linha:        #DFDED6;
+  --zebra:        #F7F7F4;
+}
+
+@page{
+  size: A4 portrait;
+  margin: 14mm 13mm 15mm 13mm;
+}
+/* Numeração de página: descomentar se o cliente pedir.
+@page{ @bottom-right{ content: counter(page); font: 7pt "Carlito", sans-serif; color: #9AA0A4; } }
+*/
+
+*{ box-sizing: border-box; }
+
+body{
+  font-family: "Carlito", "Calibri", "Lato", "DejaVu Sans", sans-serif;
+  font-size: 8.6pt;
+  line-height: 1.45;
+  color: var(--texto);
+  margin: 0;
+}
+
+p{ margin: 0 0 6pt; text-align: justify; }
+strong{ font-weight: 700; }
+small{ font-size: 7.4pt; }
+.fraco{ color: var(--texto-fraco); }
+.num{ text-align: right; white-space: nowrap; }
+.centro{ text-align: center; }
+.critico{ color: var(--vermelho); font-weight: 700; }
+.positivo{ color: var(--verde-claro); font-weight: 700; }
+
+/* ---------- Cabeçalho da primeira página ---------------------------------- */
+
+.topbar{ height: 4.5pt; background: var(--verde); }
+.topbar-gold{ height: 1.6pt; background: var(--dourado); margin-bottom: 12pt; }
+
+.doc-head{
+  display: flex; justify-content: space-between; align-items: flex-end;
+  border-bottom: 1.4pt solid var(--verde);
+  padding-bottom: 7pt; margin-bottom: 14pt;
+}
+.brand{ display: flex; align-items: center; gap: 8pt; }
+.brand img{ height: 34pt; }               /* logo: inserir depois em assets/logo.png */
+.brand .nome{ font-size: 15pt; font-weight: 700; color: var(--verde); line-height: 1; }
+.brand .nome em{ font-style: normal; color: var(--dourado); }
+.brand .tag{ font-size: 6.4pt; letter-spacing: 2.2pt; color: var(--texto-fraco); text-transform: uppercase; }
+.doc-meta{ text-align: right; font-size: 7.6pt; color: var(--texto-fraco); line-height: 1.5; }
+.doc-meta .n{ font-size: 8.4pt; font-weight: 700; color: var(--texto); letter-spacing: .3pt; }
+
+h1{
+  font-size: 20pt; font-weight: 700; color: var(--verde);
+  text-align: center; letter-spacing: .2pt; margin: 0 0 4pt;
+}
+.subtitulo{ text-align: center; font-style: italic; color: var(--texto-fraco); font-size: 9pt; margin: 0 0 6pt; }
+.tags{ text-align: center; font-size: 8.2pt; font-weight: 700; color: var(--ambar); margin: 0 0 8pt; }
+.ident-linha{ text-align: center; font-size: 7.6pt; color: var(--texto-fraco); margin: 0 0 12pt; line-height: 1.5; }
+.ident-linha strong{ color: var(--texto); }
+
+/* ---------- Cartões de indicador (KPI) ------------------------------------ */
+
+.kpis{ display: flex; gap: 7pt; margin-bottom: 11pt; }
+.kpi{
+  flex: 1; border: 1pt solid var(--linha); border-radius: 3pt;
+  padding: 7pt 8pt; background: #fff;
+}
+.kpi .rot{ font-size: 6.6pt; letter-spacing: 1.1pt; text-transform: uppercase; color: var(--texto-fraco); display: block; margin-bottom: 3pt; }
+.kpi .val{ font-size: 13pt; font-weight: 700; color: var(--texto); line-height: 1.1; }
+.kpi.destaque{ background: var(--dourado-bg); border-color: var(--dourado); }
+.kpi.destaque .val{ color: var(--dourado); }
+.kpi.ok .val{ color: var(--verde-claro); }
+.kpi.alerta .val{ color: var(--vermelho); }
+
+/* ---------- Painéis lado a lado ------------------------------------------- */
+
+.duo{ display: flex; gap: 9pt; margin-bottom: 12pt; }
+.painel{
+  flex: 1; border: 1pt solid var(--linha); border-radius: 3pt;
+  padding: 9pt 10pt; break-inside: avoid;
+}
+.painel h4{
+  font-size: 7.2pt; letter-spacing: 1.1pt; text-transform: uppercase;
+  color: var(--verde); margin: 0 0 8pt; font-weight: 700;
+}
+.painel-linha{ display: flex; gap: 10pt; align-items: center; }
+.painel p{ font-size: 7.6pt; margin: 0 0 4pt; }
+
+/* rosca (donut) */
+.donut{ width: 92pt; height: 92pt; flex: none; }
+
+.legenda{ font-size: 7.4pt; line-height: 1.7; }
+.legenda .pin{ display: inline-block; width: 7pt; height: 7pt; border-radius: 1.5pt; margin-right: 4pt; vertical-align: -0.5pt; }
+
+.badge{ display: inline-block; width: 11pt; height: 11pt; line-height: 11pt; text-align: center;
+        border-radius: 50%; background: #E7E9E7; color: var(--texto-fraco); font-size: 7pt; font-weight: 700; }
+.badge.alvo{ background: var(--verde-claro); color: #fff; }
+
+/* barras comparativas */
+.barras{ margin-top: 8pt; font-size: 7pt; }
+.barras .li{ display: flex; align-items: center; gap: 5pt; margin-bottom: 4pt; }
+.barras .rot{ width: 42pt; color: var(--texto-fraco); line-height: 1.15; }
+.barra{ height: 13pt; border-radius: 2pt; color: #fff; font-size: 6.8pt; font-weight: 700;
+        padding: 2.5pt 5pt; white-space: nowrap; }
+.barra.cinza{ background: #C9CCC9; color: #43494C; }
+.barra.verde{ background: var(--verde-claro); }
+.barras .fecho{ color: var(--verde-claro); font-weight: 700; font-size: 7.2pt; margin-top: 3pt; }
+
+/* ---------- Bloco de desembolso ------------------------------------------- */
+
+h3.bloco{
+  font-size: 11pt; color: var(--verde); font-weight: 700; margin: 14pt 0 7pt;
+  border-bottom: 1pt solid var(--dourado); padding-bottom: 3pt;
+}
+
+/* ---------- Faixa de PARTE ------------------------------------------------ */
+
+.parte{
+  background: var(--verde); color: #fff; text-align: center;
+  padding: 8pt 10pt; border-radius: 3pt; margin: 0 0 13pt;
+  break-after: avoid;
+}
+.parte .t{ font-size: 10.5pt; font-weight: 700; letter-spacing: .6pt; }
+.parte .s{ font-size: 7.6pt; font-style: italic; opacity: .85; }
+
+/* ---------- Títulos de seção ---------------------------------------------- */
+
+h2{
+  font-size: 10pt; color: var(--verde); font-weight: 700;
+  margin: 13pt 0 6pt; padding-bottom: 3pt;
+  border-bottom: 1pt solid var(--dourado);
+  break-after: avoid;
+}
+h3{ font-size: 8.6pt; color: var(--ambar); font-weight: 700; margin: 10pt 0 5pt; break-after: avoid; }
+
+/* ---------- Tabelas -------------------------------------------------------- */
+
+table{ width: 100%; border-collapse: collapse; margin: 0 0 7pt; font-size: 7.9pt; break-inside: avoid; }
+thead th{
+  background: var(--verde); color: #fff; font-size: 7.2pt; font-weight: 700;
+  text-align: left; padding: 5pt 7pt; letter-spacing: .2pt;
+}
+thead th.num{ text-align: right; }
+tbody td{ padding: 4.5pt 7pt; border-bottom: .6pt solid var(--linha); vertical-align: top; }
+tbody tr:nth-child(even) td{ background: var(--zebra); }
+tbody tr.total td{ background: #EAEFEA; font-weight: 700; color: var(--verde); border-bottom: none; }
+td .fraco{ font-size: 7.2pt; }
+
+/* tabela chave-valor da identificação */
+table.ident tbody td{ border-bottom: .6pt solid var(--linha); }
+table.ident td.k{ width: 30%; background: var(--zebra); font-weight: 700; color: var(--verde); }
+table.ident tbody tr:nth-child(even) td{ background: #fff; }
+table.ident tbody tr:nth-child(even) td.k{ background: var(--zebra); }
+
+/* ---------- Caixas de texto ------------------------------------------------ */
+
+.nota{ font-size: 7.6pt; color: var(--texto); margin: 0 0 8pt; }
+
+.caixa{
+  border-left: 2.5pt solid var(--linha); background: #F7F8F7;
+  padding: 7pt 10pt; margin: 0 0 9pt; font-size: 7.7pt; break-inside: avoid;
+}
+.caixa h5{ font-size: 7.2pt; letter-spacing: 1pt; text-transform: uppercase; margin: 0 0 4pt; font-weight: 700; }
+.caixa p:last-child{ margin-bottom: 0; }
+
+.caixa.conferencia{ border-left-color: var(--dourado); background: var(--dourado-bg); }
+.caixa.conferencia h5{ color: var(--dourado); }
+.caixa.atencao{ border-left-color: var(--ambar); background: var(--ambar-bg); }
+.caixa.atencao h5{ color: var(--ambar); }
+.caixa.critica{ border-left-color: var(--vermelho); background: var(--vermelho-bg); }
+.caixa.critica h5{ color: var(--vermelho); }
+.caixa.leitura{ border-left-color: var(--verde-claro); background: var(--verde-bg); }
+.caixa.leitura h5{ color: var(--verde); }
+
+/* ---------- Faixas de alerta (banner) -------------------------------------- */
+
+.banner{ margin: 0 0 10pt; break-inside: avoid; }
+.banner-head{
+  display: flex; justify-content: space-between; align-items: flex-start;
+  color: #fff; padding: 5.5pt 9pt; border-radius: 3pt 3pt 0 0;
+}
+.banner-head .t{ font-size: 8.4pt; font-weight: 700; letter-spacing: .3pt; }
+.banner-head .s{ font-size: 7pt; font-style: italic; opacity: .9; }
+.banner-head .contador{ text-align: right; line-height: 1.1; }
+.banner-head .contador .rot{ font-size: 6.4pt; letter-spacing: 1pt; opacity: .9; }
+.banner-head .contador .n{ font-size: 12pt; font-weight: 700; }
+.banner-body{
+  border: 1pt solid var(--linha); border-top: none; border-radius: 0 0 3pt 3pt;
+  padding: 8pt 10pt; font-size: 7.8pt; color: var(--texto);
+}
+.banner.critico .banner-head{ background: var(--vermelho); }
+.banner.atencao .banner-head{ background: var(--ambar); }
+.banner.ok .banner-head{ background: var(--verde); }
+
+/* ---------- Fechamento ------------------------------------------------------ */
+
+ul{ margin: 0 0 8pt; padding-left: 14pt; }
+li{ margin-bottom: 4pt; text-align: justify; }
+
+.assinatura{
+  margin-top: 14pt; padding-top: 7pt; border-top: 1pt solid var(--linha);
+  text-align: center; font-size: 7.8pt; color: var(--texto-fraco);
+}
+
+.quebra{ break-before: page; }

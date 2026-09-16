@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<!-- ===========================================================================
+     TEMPLATE MESTRE — PARECER / DIAGNÓSTICO FISCAL
+     Copiar este arquivo, substituir os campos {{ }}, apagar os blocos que não
+     se aplicam ao caso e gerar o PDF com scripts/build.py.
+     Os comentários deste arquivo podem ficar: não são renderizados.
+     =========================================================================== -->
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>{{TITULO_ARQUIVO}}</title>
+<link rel="stylesheet" href="parecer.css">
+</head>
+<body>
+
+<div class="topbar"></div><div class="topbar-gold"></div>
+
+<!-- CABEÇALHO ---------------------------------------------------------------
+     A logo entra depois: se existir assets/logo.png, usar a linha <img>;
+     enquanto não existir, manter apenas o bloco de texto da marca. -->
+<div class="doc-head">
+  <div class="brand">
+    <img src="logo.svg" alt="FS Soluções Tributárias" style="height:40pt">
+  </div>
+  <div class="doc-meta">
+    <div class="n">PARECER Nº {{NUMERO}}/{{ANO}}</div>
+    <div>{{CLIENTE_CURTO}}</div>
+    <div>{{DATA_EXTENSO}}</div>
+  </div>
+</div>
+
+<h1>{{TITULO}}</h1>
+<p class="subtitulo">{{LINHA_FINA}}</p>
+<p class="tags">{{EIXO_1}} · {{EIXO_2}} · {{EIXO_3}} · {{EIXO_4}}</p>
+<p class="ident-linha">
+  <strong>{{RAZAO_SOCIAL}}</strong> · CNPJ {{CNPJ}} · Base {{FONTE_1}} {{DATA_BASE}} ·
+  {{FONTE_2}} {{DATA_BASE}} · {{PROCESSO}}
+</p>
+
+<!-- PAINEL DE INDICADORES ---------------------------------------------------
+     Sempre 4 cartões. O 2º recebe a classe "destaque" (o número que sustenta a
+     proposta); o 3º "ok" (economia); o 4º fica neutro (o que sai do caixa). -->
+<div class="kpis">
+  <div class="kpi"><span class="rot">Passivo inscrito</span><span class="val">R$ {{PASSIVO}}</span></div>
+  <div class="kpi destaque"><span class="rot">Desconto-alvo (C/D)</span><span class="val">{{DESC_PCT}}</span></div>
+  <div class="kpi ok"><span class="rot">Economia potencial</span><span class="val">R$ {{ECONOMIA}}</span></div>
+  <div class="kpi"><span class="rot">Valor a pagar</span><span class="val">R$ {{A_PAGAR}}</span></div>
+</div>
+
+<!-- DOIS PAINÉIS: SCORE + COMPOSIÇÃO ---------------------------------------
+     Os dois SVG são gerados por scripts/calc.py (blocos "SVG DONUT"). -->
+<div class="duo">
+  <div class="painel">
+    <h4>Score de economia (potencial)</h4>
+    <div class="painel-linha">
+      {{SVG_DONUT_SCORE}}
+      <div class="legenda">
+        <span class="badge">{{RATING_HOJE}}</span> hoje &nbsp;→&nbsp;
+        <span class="badge alvo">{{RATING_ALVO}}</span> alvo<br>
+        {{FRASE_RATING}}
+      </div>
+    </div>
+    <div class="barras">
+      <div class="li"><span class="rot">Sem o trabalho</span>
+        <span class="barra cinza" style="width:{{LARG_SEM}}pt">R$ {{PASSIVO}}</span></div>
+      <div class="li"><span class="rot">Com o trabalho</span>
+        <span class="barra verde" style="width:{{LARG_COM}}pt">R$ {{A_PAGAR}}</span></div>
+      <div class="fecho">▼ economia potencial de R$ {{ECONOMIA}} ({{DESC_PCT}})</div>
+    </div>
+  </div>
+
+  <div class="painel">
+    <h4>Composição do débito</h4>
+    <div class="painel-linha">
+      {{SVG_DONUT_COMPOSICAO}}
+      <div class="legenda">
+        <span class="pin" style="background:#234E3E"></span><strong>Principal</strong> — {{P_PCT}} <span class="fraco">(não reduz)</span><br>
+        <span class="pin" style="background:#B8912F"></span>Multa — {{M_PCT}}<br>
+        <span class="pin" style="background:#D8B75E"></span>Juros — {{J_PCT}}<br>
+        <span class="pin" style="background:#E8D9AE"></span>Encargo — {{E_PCT}}
+      </div>
+    </div>
+    <p style="margin-top:8pt">Parcelas descontáveis (multa + juros + encargo):
+      <strong>R$ {{DESCONTAVEL}}</strong> — base sobre a qual incide o desconto.</p>
+  </div>
+</div>
+
+<!-- QUADRO DE DESEMBOLSO ---------------------------------------------------- -->
+<h3 class="bloco">Quadro de desembolso — o que sai do caixa</h3>
+<div class="kpis">
+  <div class="kpi"><span class="rot">Hoje — parcelamento convencional 60x</span><span class="val">R$ {{PARC_60X}} <small>/mês</small></span></div>
+  <div class="kpi ok"><span class="rot">Entrada — meses 1 a {{N_ENTRADA}}</span><span class="val">R$ {{ENTRADA_MES}} <small>/mês</small></span></div>
+  <div class="kpi ok"><span class="rot">Saldo — meses {{INI_SALDO}} a {{FIM_SALDO}}</span><span class="val">R$ {{SALDO_MES}} <small>/mês</small></span></div>
+  <div class="kpi destaque"><span class="rot">Alívio no mês</span><span class="val">−{{ALIVIO_PCT}}</span></div>
+</div>
+
+<p class="nota">{{PARAGRAFO_REGRA_DE_PARCELAMENTO}}</p>
+
+<table>
+  <thead><tr><th>Categoria</th><th class="num">Valor s/ desconto</th><th class="num">Valor c/ desconto</th>
+    <th class="num">Entrada {{PCT_ENTRADA}}</th><th class="num">Entrada ({{N_ENTRADA}}x)</th><th class="num">Saldo — parcela</th></tr></thead>
+  <tbody>
+    <tr><td>Previdenciário <span class="fraco">(60 meses)</span></td><td class="num fraco">{{PREV_1}}</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>
+    <tr><td>Demais débitos <span class="fraco">({{TETO_MESES}} meses)</span></td><td class="num">R$ {{PASSIVO}}</td><td class="num">R$ {{A_PAGAR}}</td><td class="num">R$ {{ENTRADA_TOTAL}}</td><td class="num">R$ {{ENTRADA_MES}}</td><td class="num">{{N_PARCELAS}}x R$ {{SALDO_MES}}</td></tr>
+    <tr class="total"><td>TOTAL</td><td class="num">R$ {{PASSIVO}}</td><td class="num">R$ {{A_PAGAR}}</td><td class="num">R$ {{ENTRADA_TOTAL}}</td><td class="num">R$ {{ENTRADA_MES}}</td><td class="num">{{N_PARCELAS}}x R$ {{SALDO_MES}}</td></tr>
+  </tbody>
+</table>
+
+<table>
+  <thead><tr><th>Etapa</th><th>Período</th><th>Composição</th><th class="num">Valor mensal</th></tr></thead>
+  <tbody>
+    <tr><td>Entrada ({{PCT_ENTRADA}})</td><td>Meses 1 a {{N_ENTRADA}}</td><td>1/{{N_ENTRADA}} da entrada</td><td class="num">R$ {{ENTRADA_MES}} /mês</td></tr>
+    <tr><td>Saldo — fase 1</td><td>Meses {{INI_SALDO}} a 60</td><td>parcela demais ({{N_PARCELAS}}x)</td><td class="num">R$ {{SALDO_MES}} /mês</td></tr>
+    <tr><td>Saldo — fase 2</td><td>Meses 61 a {{FIM_SALDO}}</td><td>parcela demais ({{N_PARCELAS}}x)</td><td class="num">R$ {{SALDO_MES}} /mês</td></tr>
+  </tbody>
+</table>
+
+<div class="caixa"><p>{{PARAGRAFO_LEITURA_DO_FLUXO}}</p></div>
+
+<div class="caixa conferencia">
+  <h5>Conferência do quadro</h5>
+  <p>{{ARITMETICA_ABERTA}}</p>
+</div>
+
+<!-- BANNERS DE SITUAÇÃO -----------------------------------------------------
+     Usar apenas os que o caso exigir: crítico (prazo/impedimento), atenção
+     (dado a confirmar), ok (fato favorável). O contador da direita é opcional. -->
+<div class="banner critico">
+  <div class="banner-head">
+    <div><div class="t">⛔ {{TITULO_CRITICO}}</div><div class="s">{{SUB_CRITICO}}</div></div>
+    <div class="contador"><div class="rot">Faltam</div><div class="n">{{DIAS}} dias</div></div>
+  </div>
+  <div class="banner-body"><p>{{TEXTO_CRITICO}}</p></div>
+</div>
+
+<div class="banner atencao">
+  <div class="banner-head"><div><div class="t">⚠ {{TITULO_ATENCAO}}</div><div class="s">{{FUNDAMENTO}}</div></div></div>
+  <div class="banner-body"><p>{{TEXTO_ATENCAO}}</p></div>
+</div>
+
+<div class="banner ok">
+  <div class="banner-head"><div><div class="t">✓ {{TITULO_OK}}</div><div class="s">{{REFERENCIA}}</div></div></div>
+  <div class="banner-body"><p>{{TEXTO_OK}}</p></div>
+</div>
+
+<!-- =========================== PARTE I ==================================== -->
+<div class="parte quebra">
+  <div class="t">PARTE I — DIAGNÓSTICO DO PASSIVO</div>
+  <div class="s">Identificação, composição e detalhamento por inscrição</div>
+</div>
+
+<h2>1. Identificação</h2>
+<table class="ident"><tbody>
+  <tr><td class="k">Interessado</td><td>{{RAZAO_SOCIAL}}</td></tr>
+  <tr><td class="k">CNPJ</td><td>{{CNPJ}}</td></tr>
+  <tr><td class="k">Passivo inscrito (PGFN)</td><td><strong>R$ {{PASSIVO}}</strong> — {{N_INSCRICOES}} inscrições, {{SITUACAO_INSCRICOES}}</td></tr>
+  <tr><td class="k">Em execução fiscal</td><td>{{EXEC_FISCAL}}</td></tr>
+  <tr><td class="k">Débitos na Receita Federal</td><td>R$ {{RFB}} — passivo federal total de <strong>R$ {{FEDERAL_TOTAL}}</strong> (PGFN + RFB)</td></tr>
+  <tr><td class="k">Classificação (CAPAG)</td><td><strong>Rating {{RATING}}</strong> · capacidade em 60 meses: R$ {{CAPAG}} · cobertura de {{COBERTURA}} do passivo federal</td></tr>
+  <tr><td class="k">Situação para transação</td><td>{{SITUACAO_TRANSACAO}}</td></tr>
+  <tr><td class="k">Prazo crítico</td><td class="critico">{{PRAZO_CRITICO}}</td></tr>
+  <tr><td class="k">Objeto deste parecer</td><td>{{OBJETO}}</td></tr>
+  <tr><td class="k">Fonte / Data-base</td><td>{{FONTES}}</td></tr>
+  <tr><td class="k">Natureza</td><td>Confidencial — uso exclusivo do contribuinte</td></tr>
+</tbody></table>
+
+<h2>2. Composição do débito</h2>
+<table>
+  <thead><tr><th>Componente</th><th class="num">Valor</th><th class="num">% do total</th></tr></thead>
+  <tbody>
+    <tr><td>Principal <span class="fraco">(não reduz)</span></td><td class="num">R$ {{PRINCIPAL}}</td><td class="num">{{P_PCT}}</td></tr>
+    <tr><td>Multa</td><td class="num">R$ {{MULTA}}</td><td class="num">{{M_PCT}}</td></tr>
+    <tr><td>Juros de mora</td><td class="num">R$ {{JUROS}}</td><td class="num">{{J_PCT}}</td></tr>
+    <tr><td>Encargo legal</td><td class="num">R$ {{ENCARGO}}</td><td class="num">{{E_PCT}}</td></tr>
+    <tr class="total"><td>TOTAL CONSOLIDADO</td><td class="num">R$ {{PASSIVO}}</td><td class="num">100,00%</td></tr>
+  </tbody>
+</table>
+<p class="nota">As parcelas descontáveis somam <strong>R$ {{DESCONTAVEL}}</strong> ({{DESC_PCT}}); o principal (R$ {{PRINCIPAL}}) não é reduzido pela transação (art. 11, §2º, I, da Lei nº 13.988/2020).</p>
+
+<h2>3. Composição por natureza, tributo e ano</h2>
+<h3>3.1. Por natureza</h3>
+{{TABELA_NATUREZA}}
+<h3>3.2. Por tributo</h3>
+{{TABELA_TRIBUTO}}
+<h3>3.3. Distribuição temporal</h3>
+{{TABELA_ANO}}
+<p class="nota">{{PARAGRAFO_DECADENCIA}}</p>
+
+<h2>4. Detalhamento — composição de cada inscrição</h2>
+{{TABELA_INSCRICOES}}
+
+<!-- =========================== PARTE II =================================== -->
+<div class="parte">
+  <div class="t">PARTE II — A TRANSAÇÃO: CLASSIFICAÇÃO, SIMULAÇÃO E JANELA</div>
+  <div class="s">Rating, metodologia do desconto, desconto por inscrição e prazo de adesão</div>
+</div>
+
+<h2>5. Capacidade de pagamento e rating — {{LEITURA_DO_RATING}}</h2>
+{{TABELA_CAPAG}}
+<div class="caixa critica">
+  <h5>O ponto crítico</h5>
+  <p>{{TEXTO_PONTO_CRITICO}}</p>
+</div>
+
+<h3>5.1. Por que a revisão da CAPAG é a peça central</h3>
+<p>{{TEXTO_CAPAG_1}}</p>
+<p>{{TEXTO_CAPAG_2}}</p>
+
+<h2>6. Metodologia de cálculo do desconto</h2>
+<p>Para cada inscrição: <strong>(i)</strong> desconto máximo I = 100% da multa + juros + encargo legal; <strong>(ii)</strong> desconto máximo II = 65% do valor consolidado da inscrição; <strong>(iii)</strong> desconto aplicado = o menor entre I e II; <strong>(iv)</strong> valor final = total − desconto. O desconto nunca alcança o principal (art. 11, §2º, I, da Lei nº 13.988/2020) nem ultrapassa 65% do total.</p>
+<div class="caixa"><p>{{TEXTO_TETO}}</p></div>
+
+<h2>7. Simulação do desconto — inscrição por inscrição</h2>
+{{TABELA_SIMULACAO}}
+<div class="caixa leitura">
+  <h5>Leitura do quadro</h5>
+  <p>{{TEXTO_LEITURA}}</p>
+</div>
+
+<h2>8. A janela de adesão</h2>
+<p>{{TEXTO_EDITAL}}</p>
+{{TABELA_JANELA}}
+<h3>8.1. As saídas</h3>
+{{TABELA_SAIDAS}}
+<div class="caixa leitura">
+  <h5>Recomendação de sequência</h5>
+  <p>{{TEXTO_SEQUENCIA}}</p>
+</div>
+
+<h2>9. Condições de pagamento — variantes de prazo</h2>
+<p>{{TEXTO_VARIANTES}}</p>
+{{TABELA_VARIANTES}}
+<p class="nota">{{TEXTO_ENQUADRAMENTO}}</p>
+
+<!-- =========================== PARTE III ==================================
+     Trocar o tema desta parte conforme o caso: certidão e penhora de
+     faturamento, encontro de contas, defesa administrativa, etc. -->
+<div class="parte">
+  <div class="t">PARTE III — {{TEMA_PARTE_III}}</div>
+  <div class="s">{{SUB_PARTE_III}}</div>
+</div>
+
+<h2>10. {{TITULO_10}}</h2>
+<p>{{TEXTO_10}}</p>
+<div class="caixa atencao">
+  <h5>Atenção — {{TITULO_ATENCAO_III}}</h5>
+  <p>{{TEXTO_ATENCAO_III}}</p>
+</div>
+
+<h2>11. {{TITULO_11}}</h2>
+<p>{{TEXTO_11}}</p>
+<div class="caixa critica">
+  <h5>O que este parecer não promete</h5>
+  <p>{{TEXTO_LIMITE}}</p>
+</div>
+
+<h2>12. {{TITULO_12}}</h2>
+{{TABELA_DIMENSIONAMENTO}}
+<div class="caixa leitura">
+  <h5>Proposta</h5>
+  <p>{{TEXTO_PROPOSTA}}</p>
+</div>
+
+<h2>13. Efeito combinado no caixa</h2>
+{{TABELA_CENARIOS}}
+<p class="nota">{{TEXTO_CENARIOS}}</p>
+
+<!-- =========================== PARTE IV =================================== -->
+<div class="parte">
+  <div class="t">PARTE IV — RECOMENDAÇÕES E FECHAMENTO</div>
+  <div class="s">Ordem de execução, fundamentação, ressalvas e conclusão</div>
+</div>
+
+<h2>14. Recomendações (ordem de execução)</h2>
+{{TABELA_RECOMENDACOES}}
+
+<h2>15. Fundamentação jurídica</h2>
+<ul>{{LISTA_FUNDAMENTOS}}</ul>
+
+<h2>16. Ressalvas</h2>
+<ul>{{LISTA_RESSALVAS}}</ul>
+
+<h2>17. Conclusão</h2>
+{{PARAGRAFOS_CONCLUSAO}}
+
+<div class="assinatura">{{CIDADE}}, {{DATA_EXTENSO}} — {{MARCA_COMPLETA}}</div>
+
+</body>
+</html>

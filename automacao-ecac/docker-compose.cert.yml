@@ -1,0 +1,41 @@
+services:
+  browser-session:
+    build: .
+    command: ["/usr/local/bin/start-browser-session"]
+    env_file: .env
+    environment:
+      CERTIFICATE_PROVIDER: local
+      CERT_PFX_PATH: /run/secrets/ecac/certificate.pfx
+      CERT_PFX_PASSPHRASE: ""
+      CERT_PFX_PASSPHRASE_FILE: /run/secrets/ecac/passphrase
+      ECAC_BROWSER_PROFILE_DIR: /app/data/ecac-browser-profile
+    volumes:
+      - ./secrets:/run/secrets/ecac:ro
+      - ecac_browser_profile:/app/data/ecac-browser-profile
+    ports:
+      - "127.0.0.1:6080:6080"
+    shm_size: "1gb"
+    init: true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:9222/json/version').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+    restart: unless-stopped
+  worker:
+    environment:
+      RPA_MODE: ecac
+      CERTIFICATE_PROVIDER: local
+      CERT_PFX_PATH: /run/secrets/ecac/certificate.pfx
+      CERT_PFX_PASSPHRASE: ""
+      CERT_PFX_PASSPHRASE_FILE: /run/secrets/ecac/passphrase
+      ECAC_CDP_URL: http://browser-session:9223
+    volumes:
+      - ./secrets:/run/secrets/ecac:ro
+    depends_on:
+      browser-session:
+        condition: service_healthy
+
+volumes:
+  ecac_browser_profile:

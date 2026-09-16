@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+deploy.env
+data/
+secrets/
+downloads/
+playwright-report/
+test-results/
+*.log
+*.pfx
+*.p12
+*.pem
+*.key
