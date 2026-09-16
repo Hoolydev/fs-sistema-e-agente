@@ -14,7 +14,9 @@ export async function documents(search="",companyOnly=false):Promise<StoredDocum
  const archived=await query('SELECT d.id,d.cnpj,d.company,d.name,d.kind,d.created_at,d.source,d.size,r.document_id AS report_id FROM fs_documents d LEFT JOIN fs_diagnostic_reports r ON r.document_id=d.id');
  const all:StoredDocument[]=[...legacy.map(r=>{const event=JSON.parse(String(r.payload));return {id:`crm_${r.id}`,company:event.company.name,cnpj:event.company.cnpj,name:String(r.name),kind:String(r.kind),createdAt:String(r.created_at),source:'Sistema FS',size:Number(r.size)};}),...archived.map(r=>({id:`doc_${r.id}`,company:String(r.company),cnpj:String(r.cnpj),name:String(r.name),kind:String(r.kind),createdAt:String(r.created_at),source:String(r.source),size:Number(r.size),...(r.report_id?{reportUrl:`/diagnostico/doc_${r.id}`}:{})}))];
  const q=normalizeSearch(search);
- return all.filter(d=>!q||[d.company,d.cnpj,...(companyOnly?[]:[d.name])].some(v=>normalizeSearch(v).includes(q))).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+ const matches = all.filter(d=>!q||[d.company,d.cnpj,...(companyOnly?[]:[d.name])].some(v=>normalizeSearch(v).includes(q)));
+ const companies = new Set(matches.map(d=>normalizeSearch(d.cnpj)));
+ return (companyOnly?matches:all.filter(d=>companies.has(normalizeSearch(d.cnpj)))).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
 }
 export async function documentContent(id:string){
  await setupDocuments();if(!/^(crm|doc)_[a-zA-Z0-9-]{1,80}$/.test(id))return null;

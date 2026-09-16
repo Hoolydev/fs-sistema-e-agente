@@ -17,3 +17,8 @@ test('token válido sem número autorizado não libera documento',()=>{
  const req=(phone:string,token:string)=>new Request('https://fs.test/api/agent/documents',{headers:{authorization:`Bearer ${token}`,'x-fs-requester-phone':phone}});
  assert.equal(agentActor(req('5562982540748','secret-test'),env),'5562982540748');assert.equal(agentActor(req('5562000000000','secret-test'),env),null);assert.equal(agentActor(req('5562982540748','wrong'),env),null);
 });
+test('busca pela razão social mantém fontes e pareceres da mesma empresa',async()=>{
+ await archiveDocument({externalId:'test-source',cnpj:'47733961000179',company:'CNPJ 47733961000179',name:'Extrato Serpro.pdf',kind:'documento',createdAt:'2026-09-16T12:01:00Z'},Buffer.from('%PDF-source'));
+ const result=await documents('Empresa Soluções');assert.equal(result.length,2);assert.ok(result.some(d=>d.kind==='documento'));assert.ok(result.some(d=>d.kind==='parecer'));
+ assert.equal((await documents('Extrato Serpro')).length,2);
+});

@@ -42,3 +42,11 @@ No acervo, **Ver diagnóstico** abre `/diagnostico/:documentId`: indicadores, qu
 ## Limite atual
 
 A emissão e o arquivamento de evidências coletadas estão conectados. Isso não ativa o botão de nova consulta, a fila pausada da Contabo nem o envio real de WhatsApp. O worker legado ainda precisa encaminhar seu `DiagnosticReport` para a API canônica antes da homologação automática. Não apresentar esse fluxo como já homologado de ponta a ponta.
+
+## Acervo por empresa e atualização automática
+
+A tela de Diagnóstico abre com cabeçalho navy e formulário “Analisar uma empresa”, seguido pelo acervo agrupado por CNPJ. Cada empresa tem um seletor de todos os pareceres/versões e documentos de apoio, prévia de PDF no painel e acesso ao diagnóstico estruturado quando disponível. Arquivos legados sem JSON continuam disponíveis como PDF, sem conversão presumida em diagnóstico.
+
+A busca por nome ou arquivo inclui os demais documentos do mesmo CNPJ. Empresas diferentes continuam separadas; o documento de homologação permanece identificado como teste. Não há limite visual de cinco documentos ocultando versões.
+
+O acervo se atualiza a cada 15 segundos quando a tela está visível, ao recuperar foco, ao voltar para a aba e ao recuperar conexão. Atualizações preservam a seleção do usuário, cancelam respostas antigas e não consultam provedores fiscais. O service worker continua sem cache de PDFs, dados fiscais ou sessões. Alterações de código exigem carregar a versão nova do aplicativo; a atualização automática trata a chegada de documentos ao acervo.
