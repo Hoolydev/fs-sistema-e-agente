@@ -29,7 +29,7 @@ Aceita `integra`, `divida-ativa` ou `all`. Usa somente endpoints fixos de autent
 
 ## O que falta para consulta efetiva
 
-1. Confirmar com o responsável o CNPJ titular dos contratos; `SERPRO_CONTRACTOR_CNPJ` e `SERPRO_AUTHOR_CNPJ` estavam vazios no `.env` inspecionado. O certificado FS funcionou no teste de autenticação; não preencher identidade contratual por suposição.
+1. Identidade confirmada pelo usuário: ambos os contratos são da FS, CNPJ **47.733.961/0001-79**, com o certificado digital dela. `SERPRO_CONTRACTOR_CNPJ` e `SERPRO_AUTHOR_CNPJ` foram preenchidos com `47733961000179` nos arquivos de configuração locais existentes e no `.env` da VPS, com backup privado. O certificado já passou na autenticação. Essa atualização não recriou os contêineres; o processo existente só receberá as novas variáveis quando for reconfigurado para a homologação.
 2. Configurar os mounts corretos do worker para Serpro após decidir o fluxo. No teste, o worker em execução tinha mounts do certificado e-CAC/OpenAI, sem os diretórios Serpro. A instalação dos arquivos não mudou esses mounts nem ativou consultas.
 3. Homologar SITFIS, procuração e CNPJ autorizados. O cliente SITFIS existe no código; ativação permanece desabilitada.
 4. Implementar e homologar o cliente Consulta Dívida Ativa no produto `consulta-divida-ativa-df` contratado, conferindo cobertura, paginação, unidades, falhas e cobrança. A autenticação não implementa esse adaptador.
