@@ -36,3 +36,11 @@ header.topbar{background:#10283d;border-bottom:1px solid #355064;color:#f5f7fa;p
 @media(max-width:480px){.diagnostic .diag-kpis,.diagnostic .fiscal-opinion .op-kpis{grid-template-columns:1fr}.diagnostic .diag-kpi{padding:20px}.diagnostic .diag-kpi>strong{white-space:nowrap;font-size:28px}}
 /* Native links preserve the PWA screen when iOS hands a PDF to its viewer. */
 @media(max-width:900px),(pointer:coarse){.fs-company-actions .fs-pdf-desktop,.crm-pdf .fs-pdf-desktop,.fs-document-preview .fs-pdf-frame{display:none}.fs-company-actions .fs-pdf-external{display:inline-flex}}
+
+/* Every module uses the same title panel as the Diagnostic workspace. */
+.page-heading.fs-page-hero{background:#10283d;color:#fff;border-radius:10px;border-bottom:3px solid #b59459;padding:28px 26px;margin-bottom:22px;gap:20px}
+.fs-page-hero .eyebrow{color:#d4b477;font-size:10px;font-weight:700;letter-spacing:1.8px;flex-wrap:wrap;line-height:1.6}
+.fs-page-hero h1{color:#fff;line-height:1.3}.page-heading.fs-page-hero p{color:#b9c9d6;font-size:14px;line-height:1.65;margin-top:8px}
+.fs-page-hero .demo-tag,.fs-page-hero .period-picker{background:#1c394e;color:#d7e2e9;border-color:#395365}
+.fs-page-hero .heading-actions{flex-wrap:wrap;justify-content:flex-end}.fs-page-hero .period-picker{padding:7px 11px}
+@media(max-width:767px){.page-heading.fs-page-hero{padding:23px 20px;flex-direction:column;align-items:flex-start;gap:16px}.fs-page-hero .eyebrow{font-size:12px}.fs-page-hero h1{font-size:26px;letter-spacing:-.5px}.page-heading.fs-page-hero p{font-size:15px}.fs-page-hero .heading-actions{justify-content:flex-start;width:100%}.fs-page-hero .demo-tag{font-size:12px}}

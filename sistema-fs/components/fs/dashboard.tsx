@@ -531,7 +531,7 @@ function Home({
 }
 
 export default function Dashboard({ screen, children }: { screen: string; children?: ReactNode }) {
-  const title =
+  const title = screen === "conta" ? "Minha conta" :
     navigation.flatMap((g) => g.items).find((i) => i.id === screen)?.label ||
     "Página inicial";
   const [period, setPeriod] = useState("Setembro de 2026");
@@ -638,21 +638,21 @@ export default function Dashboard({ screen, children }: { screen: string; childr
           </div>
         </header>
         <main className="main-content">
-          {!children && <div className="page-heading">
+          {screen !== "diagnostico" && <div className="page-heading fs-page-hero">
             <div>
               <div className="eyebrow">
                 FS SOLUÇÕES TRIBUTÁRIAS <span /> COCKPIT OPERACIONAL
               </div>
               <h1>{title}</h1>
-              <p>{descriptions[screen]}</p>
+              <p>{screen === "conta" ? "Gerencie seu acesso ao sistema FS." : descriptions[screen]}</p>
             </div>
-            <div className="heading-actions">
+            {!children && <div className="heading-actions">
               <span className="demo-tag">{screen === "comercial" ? "Contatos do site" : "Demonstração"}</span>
               <div className="period-picker">
                 <CalendarDays size={16} />
                 <span className="period-label">Setembro de 2026</span>
               </div>
-            </div>
+            </div>}
           </div>
           }
           {children ?? (screen === "inicio" ? (
