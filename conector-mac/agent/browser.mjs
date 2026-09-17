@@ -7,7 +7,7 @@
  * como processo comum, com o perfil persistente do conector e a porta CDP, e só
  * então conectamos via connectOverCDP. Assim webdriver=false e o certificado é
  * resolvido pelo Chaveiro de login (a identidade da FS está autorizada para o
- * Chrome). O registro local relata autenticação em 14/09/2026; homologar novamente no novo Mac.
+ * Chrome). Foi esse caminho que autenticou no e-CAC em 14/09/2026 sem captcha.
  *
  * SOMENTE LEITURA no portal: navega, troca de perfil e confere. Coleta e
  * parecer ficam nos scripts do pipeline da FS, que este módulo apenas orquestra.

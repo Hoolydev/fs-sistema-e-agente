@@ -100,3 +100,53 @@ LaunchAgents, atalhos, caminhos absolutos, sessões macOS/Claude, tokens de logi
 - Testes do sistema e agente passam.
 - `.env*` reais, certificados e arquivos privados aparecem como ignorados em `git status --ignored`.
 - Não houve nova consulta fiscal, envio WhatsApp ou migração de produção como efeito da instalação.
+
+---
+
+## Conector do WhatsApp (Mac + Ponte VPS) — instalação em máquina nova
+
+Arquitetura: WhatsApp → Z-API → **ponte na VPS** (`vps-bridge/`, só loopback + rota pública `/zapi` via Traefik/Coolify) → **conector no Mac** (`conector-mac/`, puxa por túnel SSH de saída) → e-CAC/PGFN → **gerador oficial** (`sistema-fs`, comando `parecer:gerar`) → PDF de volta pelo WhatsApp. Nada do Mac é exposto na internet.
+
+### 1. Mac (conector) — pré-requisitos
+- Node 22+ (via Homebrew), Google Chrome, Python 3, `claude` CLI autenticado (`claude` abre e loga).
+- Certificado A1 (PFX) da FS + senha, e a chave SSH da VPS.
+
+### 2. Instalar o conector
+```sh
+# na raiz do clone
+BASE="$HOME/fs-conector"                 # pasta de operação (fora do Git)
+mkdir -p "$BASE"/{secrets,jobs,logs,browser}
+cp -R conector-mac/agent conector-mac/pipeline "$BASE"/
+cd "$BASE/pipeline" && npm install        # playwright, pdf-parse
+# segredos (NÃO versionar): certificate.pfx, passphrase, pipeline.env, empresas.json, bridge.env, local-token
+#  - pipeline.env: FS_CERT_CNPJ, FS_CERT_RAZAO, FS_ECAC_PROFILE=$BASE/browser
+#  - empresas.json: [{"cnpj":"...","razao":"..."}]  (allowlist)
+#  - bridge.env: BRIDGE_URL=http://127.0.0.1:18790  BRIDGE_TOKEN=<igual ao da VPS>
+# importar o PFX no Chaveiro de login e autorizar o Chrome
+```
+LaunchAgents (usuário) — conector e túnel SSH de saída. Use caminhos ASCII nos `StandardOutPath` (ex.: `~/Library/Logs/…`); pasta com acento/espaço causa launchd EX_CONFIG 78:
+```sh
+# br.com.fs.conector.plist        -> node <BASE>/agent/connector.mjs  (env FS_CONNECTOR_HOME=<BASE>, FS_ECAC_CDP_PORT=19222)
+# br.com.fs.conector.tunnel.plist -> ssh -N -o ServerAliveInterval=30 -i <chave> -L 18790:127.0.0.1:18790 root@<VPS>
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/br.com.fs.conector.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/br.com.fs.conector.tunnel.plist
+fs-conector status   # atalho opcional em ~/.local/bin apontando p/ agent/connector.mjs
+```
+
+### 3. Gerador de parecer (oficial) — no mesmo clone
+```sh
+npm --prefix sistema-fs ci
+npm --prefix sistema-fs run parecer:gerar -- --demo --output /tmp/Parecer_FS_DEMO.pdf   # teste
+```
+O conector emite pelo `pipeline/src/parecer-fs.mjs`, que monta o `DiagnosticReport` e chama `parecer:gerar` (template/logo/recibo oficiais). Aponte `FS_SISTEMA_DIR` para a raiz do clone se ele não estiver no caminho padrão. **Não** usar HTML livre. Ative a skill `parecer-fs` (`~/.claude/skills/parecer-fs/` para todas as sessões, ou `.claude/skills/` do projeto).
+
+### 4. Ponte na VPS (`vps-bridge/`)
+```sh
+# na VPS, em /opt/fs-mac-bridge:
+#  - bridge.mjs (deste repo) + bridge.env (MAC_BRIDGE_TOKEN, WEBHOOK_TOKEN, ZAPI_*, AUTHORIZED_PHONE_NUMBERS, WHATSAPP_DRY_RUN=false, BRIDGE_HOST=0.0.0.0, BRIDGE_STATE_DIR=/app/state)
+bash deploy-api.sh    # sobe o container na rede do Coolify, expõe só /zapi com TLS e registra o webhook na Z-API (PUT)
+```
+DNS: subdomínio `api.<dominio>` → IP da VPS (registro A). Coolify/Traefik emite o TLS (CAA precisa liberar letsencrypt). Webhook Z-API (recebimento) = `https://api.<dominio>/zapi/<WEBHOOK_TOKEN>` via **PUT** em `update-webhook-received`.
+
+### 5. Validação
+1. `parecer:gerar --demo` gera PDF com logo/indicadores/Partes I–IV/recibo. 2. `fs-conector analisar <CNPJ>` roda coleta+emissão local. 3. Mensagem no WhatsApp (de número autorizado) → PDF de volta. Sessão do e-CAC exige login humano (possível captcha); o Mac precisa ligado, acordado e logado.

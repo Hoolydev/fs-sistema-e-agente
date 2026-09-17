@@ -28,6 +28,14 @@ const Z = {
   dryRun: /^true$/i.test(process.env.WHATSAPP_DRY_RUN || 'false'),
 }
 const AUTHORIZED = new Set((process.env.AUTHORIZED_PHONE_NUMBERS || '').split(',').map((s) => s.replace(/\D/g, '')).filter(Boolean))
+// Números BR chegam ora com o 9 (13 díg.), ora sem (12 díg.). Compara as duas formas.
+function brVariants(p) {
+  const s = String(p || '').replace(/\D/g, ''); const out = new Set([s])
+  const m = s.match(/^55(\d{2})(\d+)$/)
+  if (m) { const [, dd, rest] = m; if (rest.length === 9 && rest[0] === '9') out.add('55' + dd + rest.slice(1)); if (rest.length === 8) out.add('55' + dd + '9' + rest) }
+  return out
+}
+const isAuthorized = (p) => [...brVariants(p)].some((v) => AUTHORIZED.has(v))
 
 fs.mkdirSync(STATE_DIR, { recursive: true, mode: 0o700 })
 const dbPath = path.join(STATE_DIR, 'jobs.json')
@@ -73,7 +81,7 @@ function createJob({ cnpj, razao = '', requesterPhone, operation = 'analisar', c
 }
 
 async function entregar(job, pdfBase64, filename, note) {
-  if (!AUTHORIZED.has(job.requesterPhone)) throw new Error(`destino ${job.requesterPhone} não autorizado`)
+  if (!isAuthorized(job.requesterPhone)) throw new Error(`destino ${job.requesterPhone} não autorizado`)
   await zapi('send-document/pdf', { phone: job.requesterPhone, document: `data:application/pdf;base64,${pdfBase64}`, fileName: filename, caption: `Diagnóstico Fiscal Federal — ${job.razao || job.cnpj}. Protocolo ${job.id}.` })
   const obs = note ? `\nObservação: ${note}` : ''
   await zapi('send-text', { phone: job.requesterPhone, message: `Pronto. Segue o parecer de ${job.razao || job.cnpj} (CNPJ ${job.cnpj}), coletado em ${job.coletaEm || 'hoje'}.${obs}` })
@@ -99,7 +107,7 @@ const server = http.createServer(async (req, reply) => {
       const mid = p.messageId || ''
       if (mid && db.seen[mid]) return
       if (mid) { db.seen[mid] = Date.now(); save() }
-      if (!AUTHORIZED.has(phone)) { log('inbound não autorizado', phone); return }
+      if (!isAuthorized(phone)) { log('inbound não autorizado', phone); return }
       const cnpj = extractCnpj(text)
       if (!cnpj) { await sendText(phone, 'Para gerar a análise, envie o CNPJ (14 dígitos). Ex.: faça uma análise da empresa 51.646.813/0001-94.').catch(() => {}); return }
       const job = createJob({ cnpj, requesterPhone: phone, operation: 'analisar' })
@@ -116,7 +124,7 @@ const server = http.createServer(async (req, reply) => {
       const cnpj = String(b.cnpj || '').replace(/\D/g, '')
       const phone = String(b.requesterPhone || '').replace(/\D/g, '')
       if (!/^\d{14}$/.test(cnpj)) return send(400, { error: 'invalid_cnpj' })
-      if (!AUTHORIZED.has(phone)) return send(403, { error: 'phone_not_authorized' })
+      if (!isAuthorized(phone)) return send(403, { error: 'phone_not_authorized' })
       const job = createJob({ ...b, cnpj, requesterPhone: phone })
       return send(201, { requestId: job.id, deduped: !!b.requestId && db.jobs[b.requestId] && db.jobs[b.requestId].createdAt !== job.createdAt })
     }
