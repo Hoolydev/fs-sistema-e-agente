@@ -326,11 +326,11 @@ async function executar(job) {
         )
       }
     }
-    // Gerador do parecer no padrão da casa (navy + logo, Partes I–IV).
-    const codD = await rodar(dir, 'parecer.mjs', diagArgs, job)
+    // Emissão pelo GERADOR OFICIAL do sistema (parecer:gerar / DiagnosticReport).
+    const codD = await rodar(dir, 'parecer-fs.mjs', diagArgs, job)
 
     // localiza o PDF DESTE job (associação explícita)
-    const pdfs = fs.readdirSync(sourceDir).filter((f) => /^Parecer Fiscal .*\.pdf$/i.test(f))
+    const pdfs = fs.readdirSync(sourceDir).filter((f) => /^Parecer_FS_.*\.pdf$/i.test(f))
     if (!pdfs.length) {
       job.status = 'aguardando_revisao'
       job.note = 'Parecer não foi gerado. Ver log da etapa; nada foi entregue.'

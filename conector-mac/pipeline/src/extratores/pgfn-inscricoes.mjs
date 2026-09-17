@@ -1,4 +1,4 @@
-import { chromium } from 'playwright'
+import { chromium } from '/Users/holydev/Documents/ChatGPT/FS Soluções Tributarias/conector-local/pipeline/node_modules/playwright/index.mjs'
 import fs from 'node:fs'
 const OUT=process.argv[2], LOG=process.argv[3]
 const NUMS=JSON.parse(fs.readFileSync(process.argv[4],'utf8'))
