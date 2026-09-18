@@ -25,16 +25,22 @@ export default function DiagnosticWorkspace() {
   const totals = summarize(report);
   const pgfnPercent = totals.total && totals.pgfn !== null ? totals.pgfn / totals.total * 100 : 0;
 
-  async function consult(event: FormEvent) {
-    event.preventDefault();
+  const [reusedUrl, setReusedUrl] = useState("");
+  async function consult(event: FormEvent | null, force = false) {
+    event?.preventDefault();
     if (!isValidCnpj(cnpj)) { setError("Confira o CNPJ informado. Os dígitos verificadores não são válidos."); return; }
-    setLoading(true); setError(""); setReportVisible(false);
+    setLoading(true); setError(""); setReusedUrl(""); setReportVisible(false);
     try {
-      const response = await fetch("/api/diagnosticos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cnpj: normalizeCnpj(cnpj) }) });
+      const response = await fetch("/api/diagnosticos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cnpj: normalizeCnpj(cnpj), ...(force ? { force: true } : {}) }) });
+      if (response.status === 401) { window.location.assign("/login"); return; }
       const data = await response.json();
+      if (response.ok && typeof data.reportUrl === "string" && data.reportUrl.startsWith("/diagnostico/")) {
+        if (data.reused) { setReusedUrl(data.reportUrl); setError(data.message ?? "Já existe um diagnóstico recente deste CNPJ."); setLoading(false); return; }
+        window.location.assign(data.reportUrl); return;
+      }
       setError(data.message ?? "A consulta não retornou um diagnóstico. Tente novamente mais tarde.");
     } catch { setError("Não foi possível conectar ao serviço. Verifique sua conexão e tente novamente."); }
-    finally { setLoading(false); }
+    setLoading(false);
   }
   async function download() {
     setPdfBusy(true); setError("");
@@ -51,13 +57,13 @@ export default function DiagnosticWorkspace() {
   const filtered = report.debts.filter(d => d.origin === (tab === "Receita Federal" ? "RFB" : "PGFN") && `${d.id} ${d.tax} ${d.period}`.toLowerCase().includes(query.toLowerCase()) && (status === "Todas as situações" || d.status === status));
 
   return <div className="diagnostic">
-    <div className="diag-heading diag-hero"><div><p className="diag-eyebrow">INTELIGÊNCIA TRIBUTÁRIA</p><h1>Diagnóstico da empresa</h1><p>Do levantamento dos débitos à próxima decisão.</p></div><span className="diag-chip"><span /> Novas consultas: em homologação</span></div>
+    <div className="diag-heading diag-hero"><div><p className="diag-eyebrow">INTELIGÊNCIA TRIBUTÁRIA</p><h1>Diagnóstico da empresa</h1><p>Do levantamento dos débitos à próxima decisão.</p></div><span className="diag-chip"><span /> Consulta preliminar: PGFN + cadastro · RFB exige procuração</span></div>
     <form className="diag-search" onSubmit={consult}>
-      <div className="diag-search-label"><Building2 size={21}/><div><label htmlFor="analysis-cnpj">Analisar uma empresa</label><small>Informe o CNPJ do cliente para iniciar o levantamento.</small></div></div>
-      <div className="diag-search-controls"><input id="analysis-cnpj" value={cnpj} onChange={e => { setCnpj(e.target.value); setError(""); }} placeholder="00.000.000/0001-00" maxLength={18} autoComplete="off" aria-describedby={error ? "diagnostic-error" : undefined}/><button className="diag-button primary" disabled={loading} type="submit">{loading ? <LoaderCircle className="spin" size={16}/> : <Search size={16}/>} {loading ? "Verificando…" : "Analisar CNPJ"}</button></div>
+      <div className="diag-search-label"><Building2 size={21}/><div><label htmlFor="analysis-cnpj">Analisar uma empresa</label><small>Informe o CNPJ do lead. A dívida ativa (PGFN) e o cadastro são consultados agora; a Situação Fiscal RFB depende de procuração no e-CAC.</small></div></div>
+      <div className="diag-search-controls"><input id="analysis-cnpj" value={cnpj} onChange={e => { setCnpj(e.target.value); setError(""); }} placeholder="00.000.000/0001-00" maxLength={18} autoComplete="off" aria-describedby={error ? "diagnostic-error" : undefined}/><button className="diag-button primary" disabled={loading} type="submit">{loading ? <LoaderCircle className="spin" size={16}/> : <Search size={16}/>} {loading ? "Consultando PGFN…" : "Analisar CNPJ"}</button></div>
     </form>
     <DocumentLibrary compact/>
-    {error && <div role="alert" className="diag-alert" id="diagnostic-error"><Info size={19}/><p>{error}</p><button onClick={() => setError("")} aria-label="Fechar aviso"><X size={16}/></button></div>}
+    {error && <div role="alert" className="diag-alert" id="diagnostic-error"><Info size={19}/><p>{error}{reusedUrl && <> <a href={reusedUrl}>Abrir parecer arquivado</a> · <button className="diag-text-button" style={{ display: "inline" }} onClick={() => void consult(null, true)} disabled={loading}>Emitir nova versão (nova consulta PGFN)</button></>}</p><button onClick={() => { setError(""); setReusedUrl(""); }} aria-label="Fechar aviso"><X size={16}/></button></div>}
     {!reportVisible ? <div className="diag-demo-entry"><p>Escolha acima a empresa e o arquivo que deseja consultar.</p><button className="diag-text-button" onClick={restoreDemo} disabled={loading}>Explorar demonstração do sistema <ArrowRight size={16}/></button></div> : <>
       <div className="diag-demo-banner"><Info size={16}/><p><strong>Demonstração do sistema.</strong> Empresa, valores e inscrições fictícios. Nenhuma consulta real foi realizada.</p></div>
       <section className="diag-company"><div className="diag-company-icon"><Building2 size={23}/></div><div className="diag-company-name"><h2>{report.company.name}</h2><p>CNPJ ilustrativo {formatCnpj(report.company.cnpj)} <span>•</span> Referência {date(report.generatedAt)}</p></div><div className="diag-company-actions"><button className="diag-button" onClick={() => setTab("Parecer completo")}><FileText size={16}/> Ver parecer</button><button className="diag-button primary" onClick={download} disabled={pdfBusy}>{pdfBusy ? <LoaderCircle className="spin" size={16}/> : <ArrowDownToLine size={16}/>} {pdfBusy ? "Gerando PDF…" : "Baixar PDF"}</button></div></section>
