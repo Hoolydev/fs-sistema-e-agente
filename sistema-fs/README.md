@@ -8,10 +8,12 @@ Aplicação Next.js/React/TypeScript em produção em https://app.fssolucoestrib
 - PWA com início em Diagnóstico, layouts responsivos e identidade FS navy/dourado.
 - Comercial com leads persistidos via webhook, modal e anexos privados.
 - Acervo de PDFs compartilhado com o agente interno; APIs autorizadas por sessão ou token/telefone.
-- Diagnóstico e parecer demonstrativos com indicadores, quatro partes e 17 seções, exemplo PDF de 11 páginas.
-- Outras telas de gestão ainda demonstrativas.
+- Diagnóstico preliminar por CNPJ e parecer no template FS (indicadores, quatro partes e 17 seções). O relatório de exemplo existe apenas como massa de teste do template; não aparece nas telas.
+- Controller com processos reais, revisão (aguardando revisão → revisado/ajustes), histórico e exportação CSV.
+- Perfis de acesso com hierarquia: administrador revisor, advogado revisor e inclusão de dados; gestão da equipe em Configurações.
+- Página inicial, Painel executivo, Indicadores, Administrativo, Aprovações e Relatórios calculados a partir do Controller. Contabilidade e Jurídico ainda sem registros (estado vazio, sem dados ilustrativos).
 
-Consultas fiscais reais ainda não estão ativadas: `POST /api/diagnosticos` retorna `503 PROVIDER_NOT_READY`. O PDF demonstrativo também exige login. Não existe acesso anônimo ao acervo.
+Sem credenciais Serpro configuradas, `POST /api/diagnosticos` retorna `503 PROVIDER_NOT_READY`. Não existe acesso anônimo ao acervo nem às APIs de dados.
 
 ## Instalação
 
@@ -27,20 +29,23 @@ npm run dev -- --port 3100
 npm run typecheck
 npm run test:diagnostico
 npm run test:comercial
+npm run test:controller
 npx tsx --test tests/documentos.test.ts
 npm run build
 ```
 
-O lint global tem apontamentos históricos em componentes demonstrativos; confira os resultados antes de assumir que passou. Não adicionar `"type": "module"` ao package.json sem revisar a implantação: isso já provocou erro ESM nas APIs da Vercel.
+`npx eslint .` passa sem erros (resta um aviso de `<img>` no logo). Não adicionar `"type": "module"` ao package.json sem revisar a implantação: isso já provocou erro ESM nas APIs da Vercel.
 
 ## Mapas e contratos
 
 - [Login, PWA e agente](docs/LOGIN-PWA-AGENTE.md)
+- [Controller, perfis de acesso e revisão](docs/CONTROLLER-E-PERFIS.md)
 - [Webhook site → Comercial](docs/DIAGNOSTICO-WEBHOOK.md)
 - [Template do parecer](docs/PARECER-TEMPLATE.md)
 - `lib/diagnostico/`: schema, dados de exemplo, cálculos/blocos e PDF.
 - `lib/comercial/`: leads, anexos, validação e persistência.
 - `lib/documentos/`: acervo, acesso e auditoria.
-- `lib/auth/`, `proxy.ts`: autenticação e proteção.
+- `lib/controller/`: processos, revisão, histórico e indicadores.
+- `lib/auth/`, `proxy.ts`: autenticação, perfis/permissões e proteção.
 
 Publicar este diretório no projeto Vercel existente `holy-devops/fs-solucoes-sistema`, com Node 22. `.env*` reais, `.local`, `.vercel` e certificados não são versionados.

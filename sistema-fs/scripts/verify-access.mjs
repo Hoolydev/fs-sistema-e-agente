@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 import {parseEnv} from 'node:util';
 const base=process.argv[2]||'http://localhost:3100';
 const env=parseEnv(readFileSync('.env.production.local','utf8'));const account=JSON.parse(readFileSync('.local/provisioned-user.json','utf8'));
-for(const path of ['/api/comercial/leads','/api/documentos','/api/diagnosticos/demo/pdf'])assert.equal((await fetch(base+path)).status,401,path);
+for(const path of ['/api/comercial/leads','/api/documentos','/api/controller/processos'])assert.equal((await fetch(base+path)).status,401,path);
 assert.equal((await fetch(base+'/diagnostico',{redirect:'manual'})).status,307);
 assert.equal((await fetch(base+'/api/documentos',{headers:{cookie:'fs.session_token=forged'}})).status,401);
 const signup=await fetch(base+'/api/auth/sign-up/email',{method:'POST',headers:{'Content-Type':'application/json',Origin:base},body:JSON.stringify({name:'Blocked signup',email:'not-allowed@example.test',password:'not-a-real-password'})});assert.equal(signup.ok,false);

@@ -10,7 +10,7 @@ export function LoginForm() {
     event.preventDefault(); setBusy(true); setError("");
     try {
       const result = await authClient.signIn.email({ email: email.trim(), password, rememberMe: true });
-      if (result.error) { setError(result.error.status === 429 ? "Muitas tentativas. Aguarde um minuto e tente novamente." : "E-mail ou senha incorretos. Confira seus dados e tente novamente."); return; }
+      if (result.error) { setError(result.error.status === 429 ? "Muitas tentativas. Aguarde um minuto e tente novamente." : result.error.code === "BANNED_USER" ? "Seu acesso foi desativado. Procure o administrador da equipe FS." : "E-mail ou senha incorretos. Confira seus dados e tente novamente."); return; }
       window.location.assign("/diagnostico");
     } catch { setError("Não foi possível entrar. Verifique sua conexão e tente novamente."); }
     finally { setBusy(false); }

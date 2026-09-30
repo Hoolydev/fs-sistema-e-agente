@@ -1,5 +1,7 @@
 # Contexto consolidado — 16/09/2026
 
+> Atualização de 30/09/2026: telas de gestão sem dados demonstrativos; Controller com processos reais (importados da planilha da equipe), revisão e histórico; perfis de acesso com hierarquia (administrador revisor, advogado revisor, inclusão de dados) e gestão da equipe em Configurações. Ver `sistema-fs/docs/CONTROLLER-E-PERFIS.md`. Esta nota substitui a linha "Demais áreas de gestão: telas de demonstração" da tabela abaixo.
+
 > Interface do acervo atualizada: análise primeiro, cabeçalho navy, arquivos agrupados por CNPJ com seletor/visualização de versões e sincronização automática em 15 segundos/foco. Ver `sistema-fs/docs/PARECER-REAL-SERPRO.md`.
 
 > Atualização: parecer real FS emitido a partir das evidências Serpro já coletadas, com tela privada e PDF no mesmo template. Acervo diferencia parecer de documento de apoio. [Fluxo canônico](../sistema-fs/docs/PARECER-REAL-SERPRO.md). Novas consultas pelo PWA e emissão automática pelo worker ainda estão em homologação.

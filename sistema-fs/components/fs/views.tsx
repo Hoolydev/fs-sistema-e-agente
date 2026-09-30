@@ -1,106 +1,35 @@
 "use client";
-import { useEffect, useState, type ReactNode } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import CommercialWorkspace from "@/components/comercial/workspace";
-import {
-  Building2,
-  Plus,
-  ArrowUpRight,
-  ArrowRight,
-  Search,
-  Download,
-  FileText,
-  FolderOpen,
-  ChevronRight,
-  BriefcaseBusiness,
-  Clock3,
-  CircleCheck,
-  ChartNoAxesCombined,
-  Scale,
-  Calculator,
-  MoreHorizontal,
-  Check,
-  RotateCcw,
-  CheckCheck,
-  Users,
-  ShieldCheck,
-  Mail,
-  Link2,
-  Monitor,
-  Save,
-  Bell,
-  Settings,
-  FileChartColumn,
-  Eye,
-  SlidersHorizontal,
-  CalendarDays,
-  TriangleAlert,
-  CircleDollarSign,
-} from "lucide-react";
+import { TeamSettings } from "@/components/controller/team";
+import { useController } from "@/components/controller/context";
+import { deadlineQueue } from "@/lib/controller/metrics";
+import { awaitingDispatch, daysUntil, fieldLabels, formatDay, reviewLabels, reviewStates, searchKey, type ControllerProcess } from "@/lib/controller/model";
+import { formatCnpj } from "@/lib/diagnostico/model";
+import { ArrowRight, ArrowUpRight, BriefcaseBusiness, Building2, Calculator, CalendarDays, Check, ChevronRight, CircleCheck, Clock3, Download, FileChartColumn, FolderOpen, Plus, RotateCcw, Scale, Search, ShieldCheck, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet";
-import { Switch } from "@/components/ui/switch";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from "@/components/ui/table";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Badge,
-  Panel,
-  Picker,
-  ProcessTable,
-  Stats,
-  SlaChart,
-} from "./dashboard";
-import { processes, type Process } from "./data";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { Badge, Panel, Picker } from "./primitives";
 
-type ViewProps = {
-  screen: string;
-  period: string;
-  onSelect: (p: Process) => void;
-  notify: (s: string) => void;
-};
-const departmentData = [
-  { label: "Administrativo / Cadastro", value: 94, total: 46 },
-  { label: "Contabilidade", value: 89, total: 38 },
-  { label: "Jurídico", value: 86, total: 35 },
-  { label: "Comercial", value: 92, total: 19 },
-  { label: "Controller", value: 96, total: 10 },
-];
 function downloadCsv(name: string, rows: string[][]) {
-  const body =
-    "\ufeff" +
-    rows
-      .map((r) => r.map((c) => '"' + c.replace(/"/g, '""') + '"').join(";"))
-      .join("\r\n");
-  const url = URL.createObjectURL(
-    new Blob([body], { type: "text/csv;charset=utf-8;" }),
-  );
+  // Texto digitado que começa com =, +, - ou @ é neutralizado para não virar fórmula ao abrir no Excel.
+  const cell = (c: string) => '"' + (/^[=+\-@\t\r]/.test(c) ? "'" + c : c).replace(/"/g, '""') + '"';
+  const body = "\ufeff" + rows.map((r) => r.map(cell).join(";")).join("\r\n");
+  const url = URL.createObjectURL(new Blob([body], { type: "text/csv;charset=utf-8;" }));
   const a = document.createElement("a");
   a.href = url;
   a.download = name;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-function Summary({
-  items,
-}: {
-  items: { label: string; value: string; note: string; icon: typeof Users }[];
-}) {
+const csvHeader = ["Empresa", "CNPJ", "Objeto", "Status adm. / habilitação", "Data do protocolo", "Contagem", "Nº do processo adm.", "Última atualização", "Status", "Observações", "Revisão"];
+const csvRow = (p: ControllerProcess) => [p.company, formatCnpj(p.cnpj), p.object, p.admStatus, formatDay(p.protocolDate), formatDay(p.deadline), p.processNumber, formatDay(p.updatedOn), p.dispatchStatus, p.notes, reviewLabels[p.reviewState]];
+const stamp = () => new Date().toISOString().slice(0, 10);
+
+function Summary({ items }: { items: { label: string; value: string; note: string; icon: typeof Clock3 }[] }) {
   return (
     <div className="summary-grid">
       {items.map((item) => (
@@ -118,1273 +47,460 @@ function Summary({
     </div>
   );
 }
-function Bars({ period }: { period: string }) {
-  const values =
-    period === "Agosto de 2026"
-      ? [38, 45, 41, 57, 64, 70]
-      : [45, 41, 57, 64, 70, 83];
-  const months =
-    period === "Agosto de 2026"
-      ? ["Mar", "Abr", "Mai", "Jun", "Jul", "Ago"]
-      : ["Abr", "Mai", "Jun", "Jul", "Ago", "Set"];
-  return (
-    <div
-      className="bar-chart"
-      role="img"
-      aria-label={`Processos concluídos: ${months.map((m, i) => `${m} ${values[i]}`).join(", ")}`}
-    >
-      <div className="chart-scale">
-        {[100, 75, 50, 25, 0].map((n) => (
-          <span key={n}>{n}</span>
-        ))}
-      </div>
-      <div className="chart-plot">
-        <div className="chart-grid" aria-hidden="true">
-          <i />
-          <i />
-          <i />
-          <i />
-          <i />
-        </div>
-        {values.map((value, i) => (
-          <div className="bar-column" key={i}>
-            <div className="bar-space">
-              <div
-                className={`chart-bar ${i === 5 ? "highlight" : ""}`}
-                style={{ height: `${value}%` }}
-              >
-                <span>{value}</span>
-              </div>
-            </div>
-            <small>{months[i]}</small>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+// Estados comuns a todas as telas que dependem dos registros do Controller.
+function DataState() {
+  const { loading, error, reload } = useController();
+  if (loading) return <div className="panel empty-state"><Clock3 size={28} /><strong>Carregando registros…</strong></div>;
+  if (error) return <div className="panel empty-state" role="alert"><TriangleAlert size={28} /><strong>Não foi possível carregar</strong><p>{error}</p><Button variant="outline" onClick={() => void reload()}>Tentar novamente</Button></div>;
+  return null;
 }
-function Performance() {
+function Distribution({ rows, total }: { rows: { label: string; count: number }[]; total: number }) {
+  if (!rows.length) return <div className="empty-state"><p>Sem registros.</p></div>;
   return (
     <div className="department-performance">
-      {departmentData.map((d, i) => (
+      {rows.map((d, i) => (
         <div key={d.label}>
           <div>
             <span>{d.label}</span>
-            <strong>{d.value}%</strong>
+            <strong>{d.count}</strong>
           </div>
           <div className="progress-line">
-            <i
-              style={{
-                width: `${d.value}%`,
-                background: i === 2 ? "#bd974e" : "#234761",
-              }}
-            />
+            <i style={{ width: `${total ? (d.count / total) * 100 : 0}%`, background: i % 2 ? "#bd974e" : "#234761" }} />
           </div>
         </div>
       ))}
     </div>
   );
 }
-function Executive({ period }: ViewProps) {
+const monthName = (month: string) => new Intl.DateTimeFormat("pt-BR", { month: "short", year: "2-digit", timeZone: "UTC" }).format(new Date(`${month}-01T00:00:00Z`)).replace(".", "");
+function MonthBars({ rows }: { rows: { month: string; count: number }[] }) {
+  const max = Math.max(1, ...rows.map((r) => r.count));
+  if (!rows.length) return <div className="empty-state"><p>Nenhum protocolo registrado.</p></div>;
+  return (
+    <div className="ctrl-months" role="img" aria-label={`Protocolos por mês: ${rows.map((r) => `${monthName(r.month)} ${r.count}`).join(", ")}`}>
+      {rows.map((r) => (
+        <div key={r.month}>
+          <span>{r.count}</span>
+          <i style={{ height: Math.max(4, Math.round((r.count / max) * 120)) }} />
+          <small>{monthName(r.month)}</small>
+        </div>
+      ))}
+    </div>
+  );
+}
+function Countdown({ process }: { process: ControllerProcess }) {
+  const days = daysUntil(process.deadline);
+  if (days === null) return <span className="muted">—</span>;
+  if (!awaitingDispatch(process)) return <>{formatDay(process.deadline)}</>;
+  return <span className={days < 0 ? "ctrl-late" : days <= 7 ? "gold-text" : undefined}>{formatDay(process.deadline)}<small>{days < 0 ? `encerrada há ${-days} d` : days === 0 ? "encerra hoje" : `faltam ${days} d`}</small></span>;
+}
+function ProcessList({ rows, empty }: { rows: ControllerProcess[]; empty: string }) {
+  const { open } = useController();
   return (
     <>
-      <Stats kind="executive" period={period} />
-      <div className="analytics-grid">
-        <Panel
-          title="Evolução das entregas"
-          subtitle="Processos concluídos nos últimos seis meses"
-          action={
-            <span className="chart-key">
-              <i className="legend-dot navy" />
-              Concluídos
-            </span>
-          }
-        >
-          <Bars period={period} />
-        </Panel>
-        <Panel
-          title="Eficiência por departamento"
-          subtitle="Entregas realizadas dentro do prazo"
-        >
-          <Performance />
-          <div className="panel-bottom">
-            <CircleCheck size={16} />
-            <span>Meta do escritório: 90% de entregas no prazo</span>
-          </div>
-        </Panel>
-      </div>
-      <div className="analytics-grid">
-        <Panel
-          title="Composição da carteira"
-          subtitle="Clientes ativos por frente de atuação"
-        >
-          <div className="portfolio-list">
-            {[
-              ["Planejamento tributário", "36 clientes", "39%", 39],
-              ["Recuperação de créditos", "28 clientes", "31%", 31],
-              ["Transação tributária", "18 clientes", "20%", 20],
-              ["Contencioso tributário", "10 clientes", "10%", 10],
-            ].map(([name, count, pct, width], i) => (
-              <div key={name}>
-                <span className={`portfolio-icon color-${i}`}>
-                  <BriefcaseBusiness size={18} />
-                </span>
-                <div>
-                  <strong>{name}</strong>
-                  <small>{count}</small>
-                </div>
-                <span className="portfolio-track">
-                  <i style={{ width: `${Number(width) * 2}%` }} />
-                </span>
-                <b>{pct}</b>
-              </div>
-            ))}
-          </div>
-        </Panel>
-        <Panel
-          title="Objetivos do trimestre"
-          subtitle="Julho — setembro de 2026"
-        >
-          <div className="objective-list">
-            {[
-              ["Novos clientes", "18 / 24", 75],
-              ["Receita de honorários", "R$ 486 mil / R$ 600 mil", 81],
-              ["Satisfação dos clientes", "96% / 95%", 100],
-            ].map(([title, value, pct]) => (
-              <div key={title}>
-                <div>
-                  <strong>{title}</strong>
-                  <span>{value}</span>
-                </div>
-                <div className="progress-line">
-                  <i style={{ width: `${pct}%` }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </Panel>
+      <div className="desktop-process-table"><Table className="process-table ctrl-table">
+        <TableHeader>
+          <TableRow>
+            {["Empresa", "Status adm.", "Nº do processo", "Contagem", "Status", "Observações", "Revisão", ""].map((h, i) => <TableHead key={i}>{h}</TableHead>)}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((p) => (
+            <TableRow key={p.id}>
+              <TableCell>
+                <button className="client-link" onClick={() => open(p)}>
+                  <strong>{p.company}</strong>
+                  <small>{formatCnpj(p.cnpj)} · {p.object}</small>
+                </button>
+              </TableCell>
+              <TableCell><Badge>{p.admStatus}</Badge></TableCell>
+              <TableCell className="date-cell">{p.processNumber || "—"}<small>{p.protocolDate ? `protocolo em ${formatDay(p.protocolDate)}` : "sem protocolo"}</small></TableCell>
+              <TableCell className="date-cell"><Countdown process={p} /></TableCell>
+              <TableCell><Badge>{p.dispatchStatus}</Badge></TableCell>
+              <TableCell className="ctrl-notes-cell" title={p.notes}><span>{p.notes || "—"}</span></TableCell>
+              <TableCell><Badge>{reviewLabels[p.reviewState]}</Badge></TableCell>
+              <TableCell>
+                <button className="row-action" aria-label={`Abrir processo de ${p.company}`} onClick={() => open(p)}>
+                  <ChevronRight size={17} />
+                </button>
+              </TableCell>
+            </TableRow>
+          ))}
+          {!rows.length && (
+            <TableRow>
+              <TableCell colSpan={8}>
+                <div className="empty-state"><Search /><strong>{empty}</strong></div>
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table></div>
+      <div className="mobile-process-list">
+        {rows.map((p) => (
+          <button className="mobile-process-card" key={p.id} onClick={() => open(p)} aria-label={`Abrir processo de ${p.company}`}>
+            <span className="mobile-process-title"><span><strong>{p.company}</strong><small>{formatCnpj(p.cnpj)} · {p.processNumber || "sem nº"}</small></span><ChevronRight size={18}/></span>
+            <span className="mobile-process-department">{p.object} · {p.notes || "sem observações"}</span>
+            <span className="mobile-process-state"><Badge>{p.dispatchStatus}</Badge><span><CalendarDays size={14}/>{formatDay(p.deadline)}</span></span>
+            <span className="mobile-process-owner"><Badge>{reviewLabels[p.reviewState]}</Badge><span>Atualizado em {formatDay(p.updatedOn)}</span></span>
+          </button>
+        ))}
+        {!rows.length && <div className="empty-state"><Search/><strong>{empty}</strong></div>}
       </div>
     </>
   );
 }
-function Indicators({ period }: ViewProps) {
+function Deadlines({ limit }: { limit?: number }) {
+  const { processes, open } = useController();
+  const queue = deadlineQueue(processes);
   return (
     <>
-      <Stats kind="indicators" period={period} />
-      <div className="analytics-grid">
-        <Panel
-          title="SLA por departamento"
-          subtitle="Percentual de entregas realizadas no prazo"
-        >
-          <Performance />
+      <div className="priorities">
+        {queue.slice(0, limit).map((p) => {
+          const days = daysUntil(p.deadline) ?? 0;
+          return (
+            <button key={p.id} className="priority" onClick={() => open(p)}>
+              <span className={`priority-icon ${days < 0 ? "urgent" : ""}`}><Clock3 size={20} strokeWidth={1.6} /></span>
+              <span className="priority-content">
+                <strong>{p.company}</strong>
+                <small>{p.notes || p.object}</small>
+              </span>
+              <span className="due">
+                <small>{days < 0 ? "Encerrada em" : "Encerra em"}</small>
+                <strong>{formatDay(p.deadline)}</strong>
+              </span>
+              <ChevronRight size={16} />
+            </button>
+          );
+        })}
+        {!queue.length && <div className="empty-state"><CircleCheck size={28} /><p>Nenhum processo aguardando despacho.</p></div>}
+      </div>
+      {queue.length > 0 && <div className="priority-foot"><span className="tiny-dot" />{queue.length} {queue.length === 1 ? "processo aguarda" : "processos aguardam"} despacho da Receita Federal</div>}
+    </>
+  );
+}
+function overview(m: ReturnType<typeof useController>["metrics"], review: boolean, inbox: number) {
+  return [
+    { label: "Processos acompanhados", value: String(m.total), note: `${m.companies} ${m.companies === 1 ? "empresa" : "empresas"} no Controller`, icon: BriefcaseBusiness },
+    { label: "Aguardando despacho", value: String(m.awaiting), note: `${m.dispatched} com despacho · ${m.archived} arquivado${m.archived === 1 ? "" : "s"}`, icon: Clock3 },
+    { label: "Contagem encerrada", value: String(m.overdue), note: `Sem despacho · ${m.dueSoon} encerra${m.dueSoon === 1 ? "" : "m"} em até 7 dias`, icon: TriangleAlert },
+    { label: review ? "Aguardando sua revisão" : "Ajustes pedidos", value: String(inbox), note: review ? "Registros incluídos ou editados pela equipe" : `${m.pendingReview} aguardando revisão`, icon: ShieldCheck },
+  ];
+}
+function Home() {
+  const { processes, metrics, allowed, inbox, loading, error } = useController();
+  if (loading || error) return <DataState />;
+  return (
+    <>
+      <Summary items={overview(metrics, allowed.review, inbox.length)} />
+      <div className="overview-grid">
+        <Panel title="Situação dos processos" subtitle="Distribuição por status na Receita Federal" action={<span className="small-label">{metrics.lastUpdate ? `Atualizado em ${formatDay(metrics.lastUpdate)}` : ""}</span>}>
+          <Distribution rows={metrics.byDispatch} total={metrics.total} />
         </Panel>
-        <Panel
-          title="Volume de entregas"
-          subtitle="Evolução mensal de processos concluídos"
-        >
-          <Bars period={period} />
+        <Panel title="Contagens e prazos" subtitle="Processos sem despacho, da contagem mais antiga para a mais recente" action={<Link className="text-link" href="/controller">Ver todos <ArrowUpRight size={14} /></Link>}>
+          <Deadlines limit={4} />
         </Panel>
       </div>
-      <Panel
-        title="Desempenho operacional"
-        subtitle="Indicadores para acompanhar a qualidade de cada área"
-      >
-        <Table className="process-table">
-          <TableHeader>
-            <TableRow>
-              {[
-                "Departamento",
-                "Processos ativos",
-                "SLA no prazo",
-                "Tempo médio",
-                "Avaliação",
-              ].map((t) => (
-                <TableHead key={t}>{t}</TableHead>
-              ))}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {departmentData.map((d, i) => (
-              <TableRow key={d.label}>
-                <TableCell>
-                  <strong>{d.label}</strong>
-                </TableCell>
-                <TableCell>{d.total}</TableCell>
-                <TableCell>
-                  <span className={d.value >= 90 ? "positive" : "gold-text"}>
-                    {d.value}%
-                  </span>
-                </TableCell>
-                <TableCell>{[3.2, 4.8, 5.4, 2.1, 3.8][i]} dias</TableCell>
-                <TableCell>
-                  <Badge>{d.value >= 90 ? "Regular" : "Em análise"}</Badge>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+      <Panel title="Acompanhamento dos processos" subtitle="Atualizações mais recentes do Controller" action={<Link className="text-link" href="/controller">Ver todos os processos <ArrowRight size={15} /></Link>} className="table-panel">
+        <ProcessList rows={[...processes].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 5)} empty="Nenhum processo registrado" />
+        <div className="table-footer">
+          <span>Exibindo {Math.min(processes.length, 5)} de {processes.length} processos</span>
+          <Link href="/controller">Abrir o Controller <ChevronRight size={14} /></Link>
+        </div>
       </Panel>
     </>
   );
 }
-function CreateSheet({
-  open,
-  onOpenChange,
-  title,
-  label,
-  onSave,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  title: string;
-  label: string;
-  onSave: (name: string) => void;
-}) {
-  const [name, setName] = useState("");
+function Executive() {
+  const { metrics, allowed, inbox, loading, error } = useController();
+  if (loading || error) return <DataState />;
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="detail-sheet">
-        <SheetHeader>
-          <span className="eyebrow">DEMONSTRAÇÃO</span>
-          <SheetTitle>{title}</SheetTitle>
-          <SheetDescription>
-            Preencha os dados para visualizar o cadastro nesta sessão.
-          </SheetDescription>
-        </SheetHeader>
-        <form
-          className="sheet-body fs-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!name.trim()) return;
-            onSave(name.trim());
-            setName("");
-            onOpenChange(false);
-          }}
-        >
-          <div className="form-field">
-            <Label htmlFor="entry-name">{label}</Label>
-            <Input
-              id="entry-name"
-              autoComplete="off"
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Ex.: Horizonte Comércio Ltda."
-            />
-          </div>
-          <div className="form-field">
-            <Label htmlFor="entry-contact">Nome do contato</Label>
-            <Input id="entry-contact" placeholder="Nome completo" />
-          </div>
-          <div className="form-field">
-            <Label htmlFor="entry-email">E-mail</Label>
-            <Input
-              type="email"
-              id="entry-email"
-              placeholder="contato@empresa.com.br"
-            />
-          </div>
-          <div className="form-field">
-            <Label htmlFor="entry-notes">Observações</Label>
-            <Textarea
-              id="entry-notes"
-              placeholder="Informações importantes para a equipe..."
-            />
-          </div>
-          <p className="demo-note">
-            Os dados ficam disponíveis apenas nesta demonstração e são
-            descartados ao recarregar a página.
-          </p>
-          <Button type="submit">
-            <Plus size={16} />
-            Adicionar à demonstração
-          </Button>
-        </form>
-      </SheetContent>
-    </Sheet>
+    <>
+      <Summary items={overview(metrics, allowed.review, inbox.length)} />
+      <div className="analytics-grid">
+        <Panel title="Status na Receita Federal" subtitle="Processos por situação do despacho">
+          <Distribution rows={metrics.byDispatch} total={metrics.total} />
+        </Panel>
+        <Panel title="Encaminhamento atual" subtitle="Processos por observação registrada no Controller">
+          <Distribution rows={metrics.byNotes} total={metrics.total} />
+        </Panel>
+      </div>
+      <div className="analytics-grid">
+        <Panel title="Protocolos por mês" subtitle="Quantidade de processos pela data do protocolo">
+          <MonthBars rows={metrics.byMonth} />
+        </Panel>
+        <Panel title="Status administrativo" subtitle="Situação da habilitação">
+          <Distribution rows={metrics.byAdmStatus} total={metrics.total} />
+        </Panel>
+      </div>
+    </>
   );
 }
-function Administrative({ onSelect, notify }: ViewProps) {
-  const [query, setQuery] = useState("");
-  const [open, setOpen] = useState(false);
-  const [extra, setExtra] = useState<string[]>([]);
-  const clients = [...processes.map((p) => p.client), ...extra];
+function Indicators() {
+  const { processes, metrics, loading, error } = useController();
+  if (loading || error) return <DataState />;
+  const reviewed = processes.filter((p) => p.reviewState === "aprovado").length;
   return (
     <>
       <Summary
         items={[
-          {
-            label: "Clientes cadastrados",
-            value: String(92 + extra.length),
-            note: "Empresas em acompanhamento",
-            icon: Building2,
-          },
-          {
-            label: "Cadastros completos",
-            value: "84",
-            note: "91% da base de clientes",
-            icon: CircleCheck,
-          },
-          {
-            label: "Documentos pendentes",
-            value: "8",
-            note: "Aguardando envio do cliente",
-            icon: FileText,
-          },
-          {
-            label: "Novos cadastros",
-            value: "8",
-            note: "Neste mês",
-            icon: Users,
-          },
+          { label: "Contagem encerrada", value: String(metrics.overdue), note: "Sem despacho da Receita Federal", icon: TriangleAlert },
+          { label: "Encerram em até 7 dias", value: String(metrics.dueSoon), note: "Contagens ainda em curso", icon: Clock3 },
+          { label: "Registros revisados", value: `${reviewed} de ${metrics.total}`, note: `${metrics.pendingReview} aguardando revisão · ${metrics.adjustments} com ajustes`, icon: ShieldCheck },
+          { label: "Última atualização", value: formatDay(metrics.lastUpdate), note: "Data mais recente informada nos registros", icon: CalendarDays },
         ]}
       />
-      <Panel
-        title="Base de clientes"
-        subtitle="Informações e situação cadastral"
-        action={
-          <Button onClick={() => setOpen(true)}>
-            <Plus size={16} />
-            Novo cliente
-          </Button>
-        }
-      >
-        <div className="table-toolbar">
-          <label className="search-field">
-            <Search size={16} />
-            <Input
-              aria-label="Buscar cliente"
-              placeholder="Buscar empresa..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </label>
-          <span className="small-label">
-            {clients.length} clientes nesta demonstração
-          </span>
-        </div>
-        <Table className="process-table">
-          <TableHeader>
-            <TableRow>
-              {[
-                "Empresa",
-                "Regime tributário",
-                "Documentação",
-                "Responsável",
-                "Cadastro",
-                "",
-              ].map((s, i) => (
-                <TableHead key={i}>{s}</TableHead>
-              ))}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {clients
-              .filter((c) => c.toLowerCase().includes(query.toLowerCase()))
-              .map((c, i) => (
-                <TableRow key={c}>
-                  <TableCell>
-                    <button
-                      className="company-cell"
-                      onClick={() =>
-                        onSelect({
-                          ...processes[i % 6],
-                          client: c,
-                          subject: "Cadastro do cliente",
-                        })
-                      }
-                    >
-                      <span className="company-icon">
-                        <Building2 size={19} />
-                      </span>
-                      <span>
-                        <strong>{c}</strong>
-                        <small>Goiânia · GO</small>
-                      </span>
-                    </button>
-                  </TableCell>
-                  <TableCell>
-                    {
-                      ["Lucro presumido", "Lucro real", "Simples Nacional"][
-                        i % 3
-                      ]
-                    }
-                  </TableCell>
-                  <TableCell>
-                    <Badge>{i === 3 ? "Em análise" : "Regular"}</Badge>
-                  </TableCell>
-                  <TableCell>{processes[i % 6].owner}</TableCell>
-                  <TableCell>{i === 3 ? "08/09/2026" : "02/09/2026"}</TableCell>
-                  <TableCell>
-                    <button
-                      className="row-action"
-                      aria-label={`Ver cadastro de ${c}`}
-                      onClick={() =>
-                        onSelect({
-                          ...processes[i % 6],
-                          client: c,
-                          subject: "Cadastro do cliente",
-                        })
-                      }
-                    >
-                      <ChevronRight size={17} />
-                    </button>
-                  </TableCell>
-                </TableRow>
-              ))}
-          </TableBody>
-        </Table>
-        {!clients.some((c) =>
-          c.toLowerCase().includes(query.toLowerCase()),
-        ) && (
-          <div className="empty-state">
-            <Search />
-            <strong>Nenhum cliente encontrado</strong>
-          </div>
-        )}
+      <div className="analytics-grid">
+        <Panel title="Contagens em aberto" subtitle="Processos sem despacho, da contagem mais antiga para a mais recente">
+          <Deadlines />
+        </Panel>
+        <Panel title="Protocolos por mês" subtitle="Quantidade de processos pela data do protocolo">
+          <MonthBars rows={metrics.byMonth} />
+        </Panel>
+      </div>
+      <Panel title="Revisão dos registros" subtitle="Situação dos registros do Controller na esteira de revisão">
+        <Distribution rows={reviewStates.map((s) => ({ label: reviewLabels[s], count: processes.filter((p) => p.reviewState === s).length }))} total={metrics.total} />
       </Panel>
-      <CreateSheet
-        open={open}
-        onOpenChange={setOpen}
-        title="Novo cliente"
-        label="Razão social"
-        onSave={(name) => {
-          setExtra([...extra, name]);
-          notify("Cliente adicionado à demonstração.");
-        }}
-      />
     </>
   );
 }
-function Operations({ screen, onSelect, notify }: ViewProps) {
+function ControllerView() {
+  const { processes, metrics, allowed, inbox, open, notify, loading, error } = useController();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("Todos os status");
   const [tab, setTab] = useState("todos");
-  const dept =
-    screen === "contabilidade"
-      ? "Contabilidade"
-      : screen === "juridico"
-        ? "Jurídico"
-        : null;
-  const rows = processes.filter(
-    (p) =>
-      (!dept || p.department === dept) &&
-      (status === "Todos os status" || p.status === status) &&
-      (tab !== "prioritarios" || p.progress < 80) &&
-      `${p.client} ${p.id}`.toLowerCase().includes(query.toLowerCase()),
-  );
-  const title =
-    dept === "Jurídico"
-      ? "Demandas jurídicas"
-      : dept === "Contabilidade"
-        ? "Análises contábeis e fiscais"
-        : "Visão geral dos processos";
+  if (loading || error) return <DataState />;
+  const term = searchKey(query);
+  const rows = processes.filter((p) =>
+    (status === "Todos os status" || p.dispatchStatus === status) &&
+    (tab === "todos" || (tab === "abertos" ? awaitingDispatch(p) : p.reviewState !== "aprovado")) &&
+    (!term || [p.company, p.cnpj, p.processNumber, p.notes].some((v) => searchKey(v).includes(term))));
+  const ordered = tab === "abertos" ? deadlineQueue(rows).concat(rows.filter((p) => !p.deadline)) : rows;
   return (
     <>
-      <Summary
-        items={[
-          {
-            label: dept ? "Demandas em andamento" : "Processos em andamento",
-            value: dept === "Jurídico" ? "35" : dept ? "38" : "148",
-            note: "Acompanhamento da equipe",
-            icon:
-              dept === "Jurídico"
-                ? Scale
-                : dept
-                  ? Calculator
-                  : BriefcaseBusiness,
-          },
-          {
-            label: "Entregas no prazo",
-            value: dept === "Jurídico" ? "86%" : dept ? "89%" : "89%",
-            note: "Indicador de nível de serviço",
-            icon: Clock3,
-          },
-          {
-            label: "Aguardando aprovação",
-            value: dept === "Jurídico" ? "5" : dept ? "4" : "12",
-            note: "Disponíveis para revisão",
-            icon: ShieldCheck,
-          },
-          {
-            label: "Concluídos no mês",
-            value: dept === "Jurídico" ? "21" : dept ? "28" : "83",
-            note: "Etapas finalizadas",
-            icon: CircleCheck,
-          },
-        ]}
-      />
+      <Summary items={overview(metrics, allowed.review, inbox.length)} />
       <Panel
-        title={title}
-        subtitle="Acompanhe responsáveis, etapas e próximos prazos"
+        title="Gestão de processos"
+        subtitle="Procedimento administrativo e prazo — habilitação e acompanhamento na Receita Federal"
         action={
-          <Button
-            variant="outline"
-            onClick={() => {
-              downloadCsv("processos-demonstracao.csv", [
-                ["Processo", "Cliente", "Departamento", "Status", "Prazo"],
-                ...rows.map((p) => [
-                  p.id,
-                  p.client,
-                  p.department,
-                  p.status,
-                  p.date,
-                ]),
-              ]);
-              notify("Lista demonstrativa exportada em CSV.");
-            }}
-          >
-            <Download size={15} />
-            Exportar lista
-          </Button>
+          <div className="ctrl-panel-actions">
+            <Button variant="outline" disabled={!rows.length} onClick={() => { downloadCsv(`controller-processos-${stamp()}.csv`, [csvHeader, ...ordered.map(csvRow)]); notify("Lista exportada em CSV."); }}>
+              <Download size={15} />
+              Exportar lista
+            </Button>
+            {allowed.create && <Button onClick={() => open("novo")}><Plus size={16} />Novo processo</Button>}
+          </div>
         }
       >
         <Tabs value={tab} onValueChange={setTab} className="operation-tabs">
           <TabsList variant="line">
             <TabsTrigger value="todos">Todos os processos</TabsTrigger>
-            <TabsTrigger value="prioritarios">Prioridades</TabsTrigger>
-            <TabsTrigger value="prazos">Agenda de prazos</TabsTrigger>
+            <TabsTrigger value="abertos">Aguardando despacho</TabsTrigger>
+            <TabsTrigger value="revisao">Em revisão</TabsTrigger>
           </TabsList>
-          <div className="table-toolbar">
-            <label className="search-field">
-              <Search size={16} />
-              <Input
-                placeholder="Buscar processo ou cliente..."
-                aria-label="Buscar processo ou cliente"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-            </label>
-            <Picker
-              label="Filtrar status"
-              value={status}
-              onChange={setStatus}
-              options={[
-                "Todos os status",
-                "Em andamento",
-                "Em análise",
-                "Aguardando aprovação",
-                "Concluído",
-              ]}
-            />
-          </div>
-          <TabsContent value="todos">
-            <ProcessTable rows={rows} onSelect={onSelect} />
-          </TabsContent>
-          <TabsContent value="prioritarios">
-            <ProcessTable rows={rows} onSelect={onSelect} />
-          </TabsContent>
-          <TabsContent value="prazos">
-            <div className="agenda">
-              {rows.map((p) => (
-                <button key={p.id} onClick={() => onSelect(p)}>
-                  <span className="calendar-date">
-                    <strong>{p.date.slice(0, 2)}</strong>
-                    <small>SET</small>
-                  </span>
-                  <span>
-                    <strong>{p.subject}</strong>
-                    <small>
-                      {p.client} · {p.owner}
-                    </small>
-                  </span>
-                  <Badge>{p.status}</Badge>
-                  <ChevronRight size={18} />
-                </button>
-              ))}
-              {!rows.length && (
-                <div className="empty-state">
-                  Nenhum prazo para os filtros selecionados.
-                </div>
-              )}
-            </div>
-          </TabsContent>
         </Tabs>
+        <div className="table-toolbar">
+          <label className="search-field">
+            <Search size={16} />
+            <Input placeholder="Buscar empresa, CNPJ ou nº do processo..." aria-label="Buscar empresa, CNPJ ou número do processo" value={query} onChange={(e) => setQuery(e.target.value)} />
+          </label>
+          <Picker label="Filtrar status" value={status} onChange={setStatus} options={["Todos os status", ...metrics.byDispatch.map((d) => d.label)]} />
+        </div>
+        <ProcessList rows={ordered} empty={processes.length ? "Nenhum processo encontrado para os filtros" : "Nenhum processo registrado"} />
         <div className="table-footer">
-          <span>{rows.length} processos demonstrativos</span>
-          <span>Setembro de 2026</span>
+          <span>{ordered.length} de {processes.length} processos</span>
+          <span>{metrics.lastUpdate ? `Última atualização informada: ${formatDay(metrics.lastUpdate)}` : ""}</span>
         </div>
       </Panel>
-      {dept && (
-        <div className="module-bottom">
-          <span className="module-bottom-icon">
-            {dept === "Jurídico" ? <Scale /> : <Calculator />}
-          </span>
-          <div>
-            <h3>
-              {dept === "Jurídico"
-                ? "Prazos sob controle. Estratégias bem conduzidas."
-                : "Informação fiscal organizada, decisões mais precisas."}
-            </h3>
-            <p>
-              {dept === "Jurídico"
-                ? "Consulte os documentos e pareceres associados às demandas da equipe."
-                : "Acesse a central de documentos para acompanhar as fontes de cada análise."}
-            </p>
-          </div>
-          <Link href="/documentos">
-            Abrir documentos <ArrowRight size={16} />
-          </Link>
-        </div>
-      )}
     </>
   );
 }
-function Approvals({ onSelect, notify }: ViewProps) {
-  const [decisions, setDecisions] = useState<Record<string, string>>({});
+function Administrative() {
+  const { processes, open, loading, error } = useController();
+  const [query, setQuery] = useState("");
+  if (loading || error) return <DataState />;
+  const companies = [...processes.reduce((map, p) => map.set(p.cnpj, [...(map.get(p.cnpj) ?? []), p]), new Map<string, ControllerProcess[]>()).values()]
+    .map((list) => ({ cnpj: list[0].cnpj, name: list[0].company, list, updatedOn: list.map((p) => p.updatedOn ?? "").sort().at(-1) || null }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const term = searchKey(query);
+  const rows = companies.filter((c) => !term || searchKey(c.name).includes(term) || c.cnpj.includes(term));
+  return (
+    <Panel title="Base de clientes" subtitle="Empresas com processos registrados no Controller">
+      <div className="table-toolbar">
+        <label className="search-field">
+          <Search size={16} />
+          <Input aria-label="Buscar empresa ou CNPJ" placeholder="Buscar empresa ou CNPJ..." value={query} onChange={(e) => setQuery(e.target.value)} />
+        </label>
+        <span className="small-label">{companies.length} {companies.length === 1 ? "empresa" : "empresas"}</span>
+      </div>
+      <Table className="process-table">
+        <TableHeader>
+          <TableRow>
+            {["Empresa", "CNPJ", "Processos", "Status", "Última atualização", ""].map((s, i) => <TableHead key={i}>{s}</TableHead>)}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((c) => (
+            <TableRow key={c.cnpj}>
+              <TableCell>
+                <button className="company-cell" onClick={() => open(c.list[0])}>
+                  <span className="company-icon"><Building2 size={19} /></span>
+                  <span><strong>{c.name}</strong><small>{c.list[0].object}</small></span>
+                </button>
+              </TableCell>
+              <TableCell>{formatCnpj(c.cnpj)}</TableCell>
+              <TableCell>{c.list.length}</TableCell>
+              <TableCell><Badge>{c.list[0].dispatchStatus}</Badge></TableCell>
+              <TableCell>{formatDay(c.updatedOn)}</TableCell>
+              <TableCell>
+                <button className="row-action" aria-label={`Abrir processo de ${c.name}`} onClick={() => open(c.list[0])}><ChevronRight size={17} /></button>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      {!rows.length && <div className="empty-state"><Search /><strong>{companies.length ? "Nenhuma empresa encontrada" : "Nenhuma empresa registrada"}</strong></div>}
+    </Panel>
+  );
+}
+function EmptyModule({ screen }: { screen: string }) {
+  const legal = screen === "juridico";
+  return (
+    <>
+      <div className="panel empty-state ctrl-empty-module">
+        {legal ? <Scale size={34} strokeWidth={1.4} /> : <Calculator size={34} strokeWidth={1.4} />}
+        <strong>Nenhum registro neste módulo</strong>
+        <p>{legal ? "As demandas jurídicas ainda não são registradas aqui." : "As análises contábeis e fiscais ainda não são registradas aqui."} Os processos administrativos em andamento estão no Controller.</p>
+        <Link className="text-link" href="/controller">Abrir o Controller <ArrowRight size={14} /></Link>
+      </div>
+    </>
+  );
+}
+function Approvals() {
+  const { processes, allowed, inbox, open, loading, error } = useController();
   const [tab, setTab] = useState("pendentes");
-  const items = [processes[2], processes[1], processes[3]];
-  const pending = items.filter((p) => !decisions[p.id]);
-  const visible =
-    tab === "pendentes" ? pending : items.filter((p) => decisions[p.id]);
+  if (loading || error) return <DataState />;
+  const waiting = processes.filter((p) => p.reviewState === "pendente");
+  const adjustments = processes.filter((p) => p.reviewState === "ajustes");
+  const visible = tab === "pendentes" ? waiting : tab === "ajustes" ? adjustments : processes.filter((p) => p.reviewState === "aprovado" && p.reviewedAt).sort((a, b) => b.reviewedAt!.localeCompare(a.reviewedAt!)).slice(0, 30);
   return (
     <>
       <Summary
         items={[
-          {
-            label: "Aguardando decisão",
-            value: String(12 - Object.keys(decisions).length),
-            note: "3 solicitações nesta demonstração",
-            icon: ShieldCheck,
-          },
-          {
-            label: "Prioridade alta",
-            value: decisions[items[0].id] ? "1" : "2",
-            note: "Decisões necessárias em até 48h",
-            icon: TriangleAlert,
-          },
-          {
-            label: "Aprovadas no mês",
-            value: String(
-              34 +
-                Object.values(decisions).filter((x) => x === "Aprovado").length,
-            ),
-            note: "Processos liberados para a equipe",
-            icon: CheckCheck,
-          },
-          {
-            label: "Tempo médio de decisão",
-            value: "1,4 dias",
-            note: "Dentro da meta de 2 dias",
-            icon: Clock3,
-          },
+          { label: "Aguardando revisão", value: String(waiting.length), note: allowed.review ? "Disponíveis para sua decisão" : "Na fila dos revisores", icon: ShieldCheck },
+          { label: "Ajustes solicitados", value: String(adjustments.length), note: allowed.review ? "Devolvidos a quem incluiu" : "Corrija e salve para reenviar", icon: RotateCcw },
+          { label: "Registros revisados", value: String(processes.length - waiting.length - adjustments.length), note: `De ${processes.length} registros no Controller`, icon: CircleCheck },
+          { label: "Sua fila", value: String(inbox.length), note: allowed.review ? "Perfil revisor" : "Perfil de inclusão de dados", icon: Clock3 },
         ]}
       />
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList variant="line" className="standalone-tabs">
-          <TabsTrigger value="pendentes">
-            Aguardando aprovação{" "}
-            <span className="tab-counter">{pending.length}</span>
-          </TabsTrigger>
-          <TabsTrigger value="historico">Histórico da sessão</TabsTrigger>
+          <TabsTrigger value="pendentes">Aguardando revisão <span className="tab-counter">{waiting.length}</span></TabsTrigger>
+          <TabsTrigger value="ajustes">Ajustes solicitados <span className="tab-counter">{adjustments.length}</span></TabsTrigger>
+          <TabsTrigger value="historico">Revisados</TabsTrigger>
         </TabsList>
         <div className="approval-grid">
-          {visible.map((p, i) => (
+          {visible.map((p) => (
             <section className="panel approval-card" key={p.id}>
               <div className="approval-top">
-                <span className="priority-icon">
-                  <ShieldCheck size={20} />
-                </span>
-                <Badge>{decisions[p.id] || "Aguardando aprovação"}</Badge>
+                <span className="priority-icon"><ShieldCheck size={20} /></span>
+                <Badge>{reviewLabels[p.reviewState]}</Badge>
               </div>
-              <small className="eyebrow">{p.department}</small>
-              <h2>{p.subject}</h2>
-              <p>{p.client}</p>
+              <small className="eyebrow">{p.object}</small>
+              <h2>{p.company}</h2>
+              <p>{formatCnpj(p.cnpj)} · {p.processNumber || "sem nº de processo"}</p>
+              {p.reviewState === "ajustes" && <p className="ctrl-alert">{p.reviewNote}</p>}
               <div className="approval-meta">
-                <div>
-                  <small>Solicitado por</small>
-                  <strong>{p.owner}</strong>
-                </div>
-                <div>
-                  <small>Prazo para decisão</small>
-                  <strong>{p.date}</strong>
-                </div>
+                <div><small>{p.reviewState === "aprovado" ? "Revisado por" : "Salvo por"}</small><strong>{p.reviewState === "aprovado" ? p.reviewedBy : p.updatedBy}</strong></div>
+                <div><small>{fieldLabels.dispatchStatus}</small><strong>{p.dispatchStatus}</strong></div>
               </div>
-              <button className="text-link" onClick={() => onSelect(p)}>
-                Revisar detalhes do processo <ArrowUpRight size={14} />
-              </button>
-              {!decisions[p.id] && (
-                <div className="approval-actions">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setDecisions({ ...decisions, [p.id]: "Em análise" });
-                      notify(
-                        "Solicitação devolvida para ajustes nesta demonstração.",
-                      );
-                    }}
-                  >
-                    <RotateCcw size={14} />
-                    Pedir ajustes
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      setDecisions({ ...decisions, [p.id]: "Aprovado" });
-                      notify(
-                        "Aprovação simulada. Nenhum processo real foi alterado.",
-                      );
-                    }}
-                  >
-                    <Check size={16} />
-                    Aprovar
-                  </Button>
-                </div>
-              )}
+              <div className="approval-actions">
+                <Button variant={allowed.review && p.reviewState === "pendente" ? "default" : "outline"} onClick={() => open(p)}>
+                  {allowed.review && p.reviewState === "pendente" ? <><Check size={16} />Revisar registro</> : <>Abrir registro <ArrowUpRight size={14} /></>}
+                </Button>
+              </div>
             </section>
           ))}
         </div>
         {!visible.length && (
           <div className="panel empty-state">
             <CircleCheck size={32} />
-            <strong>
-              {tab === "pendentes"
-                ? "Tudo revisado por aqui"
-                : "Nenhuma decisão nesta sessão"}
-            </strong>
-            <p>
-              {tab === "pendentes"
-                ? "As decisões simuladas estão disponíveis no histórico."
-                : "As aprovações e pedidos de ajuste aparecerão aqui."}
-            </p>
+            <strong>{tab === "pendentes" ? "Tudo revisado por aqui" : tab === "ajustes" ? "Nenhum ajuste em aberto" : "Nenhuma revisão registrada"}</strong>
+            <p>{tab === "pendentes" ? "Registros incluídos ou editados pela equipe de inclusão aparecem aqui para revisão." : tab === "ajustes" ? "Os pedidos de ajuste feitos pelos revisores aparecem aqui." : "As decisões dos revisores aparecerão aqui."}</p>
           </div>
         )}
       </Tabs>
     </>
   );
 }
-const docs = [
-  {
-    title: "Relatório de situação fiscal",
-    client: "Alfa Engenharia Ltda.",
-    type: "Fiscal",
-    size: "248 KB",
-    date: "11 set. 2026",
-  },
-  {
-    title: "Parecer de análise tributária",
-    client: "Beta Indústria S.A.",
-    type: "Pareceres",
-    size: "1,2 MB",
-    date: "10 set. 2026",
-  },
-  {
-    title: "Contrato de prestação de serviços",
-    client: "Gama Comércio Ltda.",
-    type: "Contratos",
-    size: "384 KB",
-    date: "09 set. 2026",
-  },
-  {
-    title: "Documentação cadastral",
-    client: "Delta Serviços Ltda.",
-    type: "Cadastral",
-    size: "860 KB",
-    date: "09 set. 2026",
-  },
-  {
-    title: "Relatório consolidado de débitos",
-    client: "Épsilon Transportes Ltda.",
-    type: "Fiscal",
-    size: "516 KB",
-    date: "08 set. 2026",
-  },
-  {
-    title: "Parecer de revisão administrativa",
-    client: "Horizonte Alimentos S.A.",
-    type: "Pareceres",
-    size: "920 KB",
-    date: "08 set. 2026",
-  },
-];
-function Documents() {
-  const [category, setCategory] = useState("Todos os documentos");
-  const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState<(typeof docs)[number] | null>(null);
-  const filtered = docs.filter(
-    (d) =>
-      (category === "Todos os documentos" || category === d.type) &&
-      `${d.title} ${d.client}`.toLowerCase().includes(query.toLowerCase()),
-  );
-  return (
-    <>
-      <div className="folder-grid">
-        {["Fiscal", "Pareceres", "Contratos", "Cadastral"].map((name, i) => (
-          <button
-            key={name}
-            className={`folder-card ${category === name ? "selected" : ""}`}
-            onClick={() =>
-              setCategory(category === name ? "Todos os documentos" : name)
-            }
-          >
-            <span className={`folder-icon color-${i}`}>
-              <FolderOpen size={26} strokeWidth={1.4} />
-            </span>
-            <h3>{name}</h3>
-            <p>
-              {docs.filter((d) => d.type === name).length} documentos
-              demonstrativos
-            </p>
-            <ChevronRight size={17} />
-          </button>
-        ))}
-      </div>
-      <Panel
-        title="Central de documentos"
-        subtitle="Arquivos organizados por empresa e categoria"
-      >
-        <div className="table-toolbar">
-          <label className="search-field">
-            <Search size={16} />
-            <Input
-              aria-label="Buscar documento"
-              placeholder="Buscar documento ou cliente..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </label>
-          <Picker
-            label="Categoria de documento"
-            value={category}
-            onChange={setCategory}
-            options={[
-              "Todos os documentos",
-              "Fiscal",
-              "Pareceres",
-              "Contratos",
-              "Cadastral",
-            ]}
-          />
-        </div>
-        <Table className="process-table">
-          <TableHeader>
-            <TableRow>
-              {[
-                "Documento",
-                "Cliente",
-                "Categoria",
-                "Atualização",
-                "Tamanho",
-                "",
-              ].map((s, i) => (
-                <TableHead key={i}>{s}</TableHead>
-              ))}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filtered.map((d) => (
-              <TableRow key={d.title}>
-                <TableCell>
-                  <button
-                    className="document-name"
-                    onClick={() => setSelected(d)}
-                  >
-                    <span className="pdf-icon">
-                      <FileText size={20} />
-                      <small>PDF</small>
-                    </span>
-                    <strong>{d.title}</strong>
-                  </button>
-                </TableCell>
-                <TableCell>{d.client}</TableCell>
-                <TableCell>
-                  <span className="category-tag">{d.type}</span>
-                </TableCell>
-                <TableCell>{d.date}</TableCell>
-                <TableCell>{d.size}</TableCell>
-                <TableCell>
-                  <button
-                    className="row-action"
-                    onClick={() => setSelected(d)}
-                    aria-label={`Visualizar ${d.title}`}
-                  >
-                    <Eye size={18} />
-                  </button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-        {!filtered.length && (
-          <div className="empty-state">
-            <FolderOpen />
-            <strong>Nenhum documento encontrado</strong>
-            <p>Selecione outra categoria ou altere sua busca.</p>
-          </div>
-        )}
-      </Panel>
-      <Sheet open={!!selected} onOpenChange={(v) => !v && setSelected(null)}>
-        <SheetContent className="detail-sheet">
-          <SheetHeader>
-            <SheetTitle>{selected?.title}</SheetTitle>
-            <SheetDescription>{selected?.client}</SheetDescription>
-          </SheetHeader>
-          <div className="sheet-body">
-            <div className="document-preview">
-              <img src="/brand/logo-dark.svg" alt="FS Soluções Tributárias" />
-              <span>DOCUMENTO DEMONSTRATIVO</span>
-              <h3>{selected?.title}</h3>
-              <p>
-                <strong>Empresa:</strong> {selected?.client}
-              </p>
-              <p>
-                <strong>Categoria:</strong> {selected?.type}
-              </p>
-              <div className="document-rule" />
-              <h4>Resumo do documento</h4>
-              <p>
-                Esta prévia apresenta a organização visual dos documentos da
-                empresa. Os arquivos reais serão vinculados na implementação do
-                módulo.
-              </p>
-              <div className="document-rule" />
-              <small>FS Soluções Tributárias · {selected?.date}</small>
-            </div>
-            <p className="demo-note">
-              Prévia ilustrativa. Nenhum PDF fiscal real foi enviado para este
-              sistema.
-            </p>
-          </div>
-        </SheetContent>
-      </Sheet>
-    </>
-  );
-}
-function Reports({ notify }: ViewProps) {
-  const [selected, setSelected] = useState<string | null>(null);
-  const [period, setPeriod] = useState("Setembro de 2026");
+function Reports() {
+  const { processes, metrics, notify, loading, error } = useController();
+  if (loading || error) return <DataState />;
+  const open = deadlineQueue(processes);
   const reports = [
-    {
-      title: "Visão executiva",
-      text: "Resultados, carteira e desempenho do escritório.",
-      icon: ChartNoAxesCombined,
-      area: "Gestão",
-    },
-    {
-      title: "Relatório de processos",
-      text: "Situação dos processos, responsáveis e prazos.",
-      icon: BriefcaseBusiness,
-      area: "Operação",
-    },
-    {
-      title: "Indicadores de SLA",
-      text: "Entregas e eficiência de cada departamento.",
-      icon: Clock3,
-      area: "Qualidade",
-    },
-    {
-      title: "Pendências documentais",
-      text: "Documentos e cadastros que precisam de atenção.",
-      icon: FolderOpen,
-      area: "Administrativo",
-    },
-    {
-      title: "Análise fiscal",
-      text: "Visão das análises e demandas contábeis.",
-      icon: Calculator,
-      area: "Contabilidade",
-    },
-    {
-      title: "Acompanhamento jurídico",
-      text: "Prazos, demandas e aprovações da equipe jurídica.",
-      icon: Scale,
-      area: "Jurídico",
-    },
+    { title: "Processos do Controller", text: "Todos os registros com status, contagem, observações e situação de revisão.", icon: BriefcaseBusiness, area: "Operação", count: processes.length, run: () => downloadCsv(`controller-processos-${stamp()}.csv`, [csvHeader, ...processes.map(csvRow)]) },
+    { title: "Contagens em aberto", text: "Processos sem despacho, da contagem mais antiga para a mais recente.", icon: Clock3, area: "Prazos", count: open.length, run: () => downloadCsv(`controller-contagens-${stamp()}.csv`, [csvHeader, ...open.map(csvRow)]) },
+    { title: "Fila de revisão", text: "Registros aguardando revisão ou com ajustes solicitados.", icon: ShieldCheck, area: "Governança", count: metrics.pendingReview + metrics.adjustments, run: () => downloadCsv(`controller-revisao-${stamp()}.csv`, [csvHeader, ...processes.filter((p) => p.reviewState !== "aprovado").map(csvRow)]) },
   ];
   return (
     <>
       <div className="section-toolbar">
         <div>
           <h2>Relatórios do escritório</h2>
-          <p>Selecione uma visão para consultar os dados demonstrativos.</p>
+          <p>Exportações geradas na hora a partir dos registros do sistema.</p>
         </div>
-        <Picker
-          label="Período do relatório"
-          value={period}
-          onChange={setPeriod}
-          options={["Setembro de 2026", "Agosto de 2026"]}
-        />
       </div>
       <div className="report-grid">
         {reports.map((r) => (
           <section className="panel report-card" key={r.title}>
-            <span className="report-icon">
-              <r.icon size={26} strokeWidth={1.5} />
-            </span>
+            <span className="report-icon"><r.icon size={26} strokeWidth={1.5} /></span>
             <small className="eyebrow">{r.area}</small>
             <h2>{r.title}</h2>
             <p>{r.text}</p>
             <div>
-              <span>Atualização mensal</span>
-              <Button variant="outline" onClick={() => setSelected(r.title)}>
-                Visualizar <ArrowUpRight size={15} />
+              <span>{r.count} {r.count === 1 ? "registro" : "registros"}</span>
+              <Button variant="outline" disabled={!r.count} onClick={() => { r.run(); notify("Relatório exportado em CSV."); }}>
+                <Download size={15} /> Exportar CSV
               </Button>
             </div>
           </section>
         ))}
-      </div>
-      <Sheet open={!!selected} onOpenChange={(v) => !v && setSelected(null)}>
-        <SheetContent className="detail-sheet">
-          <SheetHeader>
-            <span className="eyebrow">RELATÓRIO DEMONSTRATIVO</span>
-            <SheetTitle>{selected}</SheetTitle>
-            <SheetDescription>
-              {period} · FS Soluções Tributárias
-            </SheetDescription>
-          </SheetHeader>
-          <div className="sheet-body">
-            <div className="report-summary">
-              <span>
-                Processos acompanhados
-                <strong>{period.startsWith("Setembro") ? "148" : "136"}</strong>
-              </span>
-              <span>
-                Entregas no prazo
-                <strong>{period.startsWith("Setembro") ? "89%" : "86%"}</strong>
-              </span>
-            </div>
-            <h3>Distribuição por departamento</h3>
-            <Performance />
-            <p className="demo-note">
-              A prévia utiliza dados ilustrativos. Os relatórios específicos de
-              cada módulo serão construídos na próxima etapa.
-            </p>
-            <Button
-              className="full-button"
-              onClick={() => {
-                downloadCsv("indicadores-demonstracao.csv", [
-                  ["Relatório demonstrativo", selected || ""],
-                  ["Período", period],
-                  ["Departamento", "SLA no prazo"],
-                  ...departmentData.map((d) => [d.label, `${d.value}%`]),
-                ]);
-                notify("Dados demonstrativos exportados em CSV.");
-              }}
-            >
-              <Download size={16} />
-              Exportar dados demonstrativos
-            </Button>
+        <section className="panel report-card">
+          <span className="report-icon"><FileChartColumn size={26} strokeWidth={1.5} /></span>
+          <small className="eyebrow">Diagnóstico fiscal</small>
+          <h2>Pareceres e diagnósticos</h2>
+          <p>Pareceres emitidos e documentos de apoio ficam no acervo, agrupados por empresa.</p>
+          <div>
+            <span>Acervo de documentos</span>
+            <Button variant="outline" asChild><Link href="/documentos"><FolderOpen size={15} /> Abrir acervo</Link></Button>
           </div>
-        </SheetContent>
-      </Sheet>
+        </section>
+      </div>
     </>
   );
 }
-function Preferences({ notify }: ViewProps) {
-  const [name, setName] = useState("Maximiano");
-  const [email, setEmail] = useState("");
-  const [alerts, setAlerts] = useState(true);
-  const [approvals, setApprovals] = useState(true);
-  useEffect(() => {
-    try {
-      const saved = JSON.parse(
-        localStorage.getItem("fs-ui-preferences") || "null",
-      );
-      if (saved) {
-        setName(saved.name);
-        setEmail(saved.email);
-        setAlerts(saved.alerts);
-        setApprovals(saved.approvals);
-      }
-    } catch {}
-  }, []);
-  return (
-    <Tabs defaultValue="geral" className="preferences">
-      <TabsList variant="line" className="standalone-tabs">
-        <TabsTrigger value="geral">Geral</TabsTrigger>
-        <TabsTrigger value="equipe">Equipe e permissões</TabsTrigger>
-        <TabsTrigger value="integracoes">Integrações</TabsTrigger>
-      </TabsList>
-      <TabsContent value="geral">
-        <div className="settings-grid">
-          <Panel
-            title="Meu perfil"
-            subtitle="Informações de identificação no sistema"
-          >
-            <form
-              className="settings-form"
-              onSubmit={(e) => {
-                e.preventDefault();
-                localStorage.setItem(
-                  "fs-ui-preferences",
-                  JSON.stringify({ name, email, alerts, approvals }),
-                );
-                notify("Preferências salvas neste navegador.");
-              }}
-            >
-              <div className="profile-card">
-                <span className="user-avatar">{name[0] || "M"}</span>
-                <div>
-                  <strong>{name}</strong>
-                  <small>Administrador · Perfil demonstrativo</small>
-                </div>
-              </div>
-              <div className="form-field">
-                <Label htmlFor="profile-name">Nome completo</Label>
-                <Input
-                  id="profile-name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="form-field">
-                <Label htmlFor="profile-email">E-mail de contato</Label>
-                <Input
-                  id="profile-email"
-                  type="email"
-                  value={email}
-                  placeholder="seu.email@empresa.com.br"
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
-              <div className="form-field">
-                <Label>Organização</Label>
-                <Input
-                  aria-label="Organização"
-                  value="FS Soluções Tributárias"
-                  readOnly
-                />
-              </div>
-              <Button type="submit">
-                <Save size={16} />
-                Salvar preferências
-              </Button>
-            </form>
-          </Panel>
-          <Panel
-            title="Notificações"
-            subtitle="Escolha o que deseja acompanhar"
-          >
-            <div className="settings-options">
-              <div>
-                <span>
-                  <strong>Alertas de prazo</strong>
-                  <small>Lembretes de processos próximos do vencimento.</small>
-                </span>
-                <Switch
-                  aria-label="Alertas de prazo"
-                  checked={alerts}
-                  onCheckedChange={setAlerts}
-                />
-              </div>
-              <div>
-                <span>
-                  <strong>Solicitações de aprovação</strong>
-                  <small>Novos processos aguardando sua decisão.</small>
-                </span>
-                <Switch
-                  aria-label="Solicitações de aprovação"
-                  checked={approvals}
-                  onCheckedChange={setApprovals}
-                />
-              </div>
-              <p className="demo-note">
-                Preferências locais da interface. O envio de notificações será
-                conectado na implementação dos módulos.
-              </p>
-            </div>
-          </Panel>
-        </div>
-      </TabsContent>
-      <TabsContent value="equipe">
-        <Panel
-          title="Equipe do escritório"
-          subtitle="Exemplo de organização dos acessos por área"
-        >
-          <Table className="process-table">
-            <TableHeader>
-              <TableRow>
-                {["Pessoa", "Departamento", "Perfil", "Situação"].map((t) => (
-                  <TableHead key={t}>{t}</TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {processes.slice(0, 5).map((p) => (
-                <TableRow key={p.id}>
-                  <TableCell>
-                    <div className="owner">
-                      <span className="avatar">{p.initials}</span>
-                      {p.owner}
-                    </div>
-                  </TableCell>
-                  <TableCell>{p.department}</TableCell>
-                  <TableCell>
-                    {p.initials === "JR" ? "Gestor de área" : "Colaborador"}
-                  </TableCell>
-                  <TableCell>
-                    <Badge>Regular</Badge>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <div className="panel-bottom">
-            Perfis ilustrativos. O controle de acesso ainda será implementado.
-          </div>
-        </Panel>
-      </TabsContent>
-      <TabsContent value="integracoes">
-        <div className="integration-grid">
-          {[
-            {
-              title: "Conector Mac",
-              icon: Monitor,
-              desc: "Coleta assistida no ambiente do escritório.",
-              status: "Não conectado",
-            },
-            {
-              title: "WhatsApp",
-              icon: Mail,
-              desc: "Solicitações e entrega de documentos pelo assistente.",
-              status: "Não conectado",
-            },
-            {
-              title: "Análise com IA",
-              icon: ChartNoAxesCombined,
-              desc: "Apoio à organização dos dados e elaboração de pareceres.",
-              status: "Não conectado",
-            },
-          ].map((i) => (
-            <Panel title={i.title} key={i.title}>
-              <div className="integration-body">
-                <i.icon size={30} strokeWidth={1.4} />
-                <p>{i.desc}</p>
-                <span className="category-tag">{i.status}</span>
-              </div>
-            </Panel>
-          ))}
-        </div>
-        <p className="demo-note">
-          As conexões serão configuradas na próxima etapa. Esta interface não
-          acessa o e-CAC, certificados ou credenciais.
-        </p>
-      </TabsContent>
-    </Tabs>
-  );
-}
-export default function ModuleView(props: ViewProps) {
-  switch (props.screen) {
+export default function ModuleView({ screen }: { screen: string }) {
+  switch (screen) {
+    case "inicio":
+      return <Home />;
     case "painel-executivo":
-      return <Executive {...props} />;
+      return <Executive />;
     case "indicadores":
-      return <Indicators {...props} />;
+      return <Indicators />;
     case "comercial":
       return <CommercialWorkspace />;
     case "administrativo":
-      return <Administrative {...props} />;
+      return <Administrative />;
     case "controller":
+      return <ControllerView />;
     case "contabilidade":
     case "juridico":
-      return <Operations {...props} />;
+      return <EmptyModule screen={screen} />;
     case "aprovacoes":
-      return <Approvals {...props} />;
-    case "documentos":
-      return <Documents />;
+      return <Approvals />;
     case "relatorios":
-      return <Reports {...props} />;
+      return <Reports />;
     case "configuracoes":
-      return <Preferences {...props} />;
+      return <TeamSettings />;
     default:
       return null;
   }

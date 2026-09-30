@@ -3,7 +3,7 @@
 ## Acesso
 
 - Login próprio FS em `/login`, com Better Auth 1.7.5 e tabelas `fs_auth_*` no PostgreSQL Neon existente.
-- Cadastro público desabilitado. Provisionamento somente pelo script administrativo `scripts/provision-user.ts`, com variáveis `FS_PROVISION_EMAIL` e `FS_PROVISION_NAME`. A senha aleatória fica em `.local/ACESSO-SISTEMA.txt` e deve ser trocada em `/conta`.
+- Cadastro público desabilitado. Usuários são criados pelo administrador em Configurações → Equipe e permissões ou pelos scripts `scripts/provision-team.ts` / `scripts/provision-user.ts`. A senha aleatória fica em arquivo privado em `.local/` (ou é exibida uma única vez ao administrador) e deve ser trocada em `/conta`. Perfis e hierarquia: [Controller, perfis de acesso e revisão](CONTROLLER-E-PERFIS.md).
 - Cookies HttpOnly, Secure em produção, sessão de 7 dias, encerramento/revogação, rate limiting persistido no banco e validação de sessão nos endpoints de dados.
 - Usuários provisionados pertencem à equipe interna FS e acessam o mesmo acervo. Portal de clientes com separação por empresa não foi criado nesta etapa.
 - O webhook de captação do site mantém seu token/assinatura e funciona independentemente de login.
