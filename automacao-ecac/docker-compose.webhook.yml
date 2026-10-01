@@ -1,7 +1,6 @@
 # Publica o webhook da Z-API diretamente no agente (api), no mesmo endereço que a ponte fs-mac-bridge atendia:
 #   https://api.fssolucoestributarias.com.br/zapi/<token>
-# Antes de subir: copiar os labels de entrypoint/TLS do contêiner fs-mac-bridge (docker inspect) se forem diferentes destes,
-# igualar ZAPI_WEBHOOK_TOKEN do .env ao WEBHOOK_TOKEN da ponte e só então parar a ponte (nunca as duas rotas ativas ao mesmo tempo).
+# Labels espelham os da ponte (lidos em 01/10/2026). Antes de parar a ponte: ZAPI_WEBHOOK_TOKEN do .env igual ao WEBHOOK_TOKEN dela.
 services:
   api:
     networks:
@@ -9,8 +8,13 @@ services:
       - coolify
     labels:
       - traefik.enable=true
-      - traefik.http.routers.fsagent.rule=Host(`api.fssolucoestributarias.com.br`) && (PathPrefix(`/zapi`) || PathPrefix(`/webhooks/zapi`))
+      - traefik.docker.network=coolify
+      - traefik.http.middlewares.fsagent-redir.redirectscheme.scheme=https
+      - traefik.http.routers.fsagent-http.entrypoints=http
+      - traefik.http.routers.fsagent-http.middlewares=fsagent-redir
+      - traefik.http.routers.fsagent-http.rule=Host(`api.fssolucoestributarias.com.br`) && (PathPrefix(`/zapi`) || PathPrefix(`/webhooks/zapi`))
       - traefik.http.routers.fsagent.entrypoints=https
+      - traefik.http.routers.fsagent.rule=Host(`api.fssolucoestributarias.com.br`) && (PathPrefix(`/zapi`) || PathPrefix(`/webhooks/zapi`))
       - traefik.http.routers.fsagent.tls=true
       - traefik.http.routers.fsagent.tls.certresolver=letsencrypt
       - traefik.http.services.fsagent.loadbalancer.server.port=3000
