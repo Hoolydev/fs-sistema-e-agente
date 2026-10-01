@@ -3,6 +3,11 @@
 # Labels espelham os da ponte (lidos em 01/10/2026). Antes de parar a ponte: ZAPI_WEBHOOK_TOKEN do .env igual ao WEBHOOK_TOKEN dela.
 services:
   api:
+    # Na rede coolify os nomes "redis" e "postgres" resolvem para os serviços do Coolify. O arquivo .env.api-rede
+    # (gerado na VPS, modo 600) aponta REDIS_URL e DATABASE_URL para fs-automacao-ecac-redis-1 e fs-automacao-ecac-postgres-1.
+    env_file:
+      - .env
+      - .env.api-rede
     networks:
       - backend
       - coolify
