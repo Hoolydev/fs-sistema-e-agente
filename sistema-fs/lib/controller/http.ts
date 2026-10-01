@@ -11,6 +11,12 @@ export async function jsonBody(request: Request): Promise<Record<string, unknown
   } catch {}
   return reply({ message: "Solicitação inválida." }, 400);
 }
+// Mensagem legível para os campos recusados pela validação (o CNPJ é o erro mais comum: dígitos verificadores).
+export function fieldsMessage(fields: (string | number | symbol)[], labels: Record<string, string>) {
+  const names = [...new Set(fields.map(String))];
+  if (names.includes("cnpj")) return "CNPJ inválido: os dois últimos dígitos não conferem com o número informado. Confira no cartão CNPJ.";
+  return names.length ? `Confira: ${names.map(n => labels[n] ?? n).join(", ")}.` : "Confira os campos informados.";
+}
 export function storeError(error: unknown) {
   const code = error instanceof Error ? error.message : "";
   if (code === "NOT_FOUND") return reply({ message: "Registro não encontrado." }, 404);

@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { useController } from "@/components/controller/context";
-import { formatCnpj } from "@/lib/diagnostico/model";
+import { formatCnpj, isValidCnpj, normalizeCnpj } from "@/lib/diagnostico/model";
 import { formatDay, reviewLabels } from "@/lib/controller/model";
 import type { Company } from "@/lib/empresas/store";
 import { CompanyDocuments } from "./company-documents";
@@ -38,7 +38,9 @@ function CompanyPanel({ company }: { company: Company | null }) {
   const [error, setError] = useState("");
   const own = company ? processes.filter(p => p.cnpj === company.cnpj) : [];
   async function save(event: FormEvent) {
-    event.preventDefault(); setBusy(true); setError("");
+    event.preventDefault();
+    if (!isValidCnpj(normalizeCnpj(cnpj))) { setError("CNPJ inválido: os dois últimos dígitos não conferem com o número informado. Confira no cartão CNPJ."); return; }
+    setBusy(true); setError("");
     try {
       const response = await fetch("/api/empresas", { method: company ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, cnpj, notes }) });
       if (response.status === 401) { window.location.assign("/login"); return; }
