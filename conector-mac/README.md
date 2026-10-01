@@ -32,6 +32,10 @@ Portas padrão: API `127.0.0.1:18765` (token local), Chrome/CDP `127.0.0.1:19222
 
 A instalação via LaunchAgent do protótipo TypeScript em `automacao-ecac/scripts/mac/install.py` é anterior e não instala automaticamente esta variante. Para inicialização automática, revisar o plist para este entrypoint após homologação. Não reutilizar symlinks `node_modules` ou caminhos absolutos do Mac antigo.
 
+## Ponte substituída pelo agente (30/09/2026)
+
+A fila do Mac passou a viver no agente principal (`automacao-ecac`, endpoints `/mac/claim`, `/mac/jobs/:id/status` e `/mac/jobs/:id/result`, bearer `MAC_BRIDGE_TOKEN`). O conector não muda de código: em `secrets/bridge.env`, `BRIDGE_URL` passa a apontar para o agente pelo túnel SSH (`http://127.0.0.1:3000`) e `BRIDGE_TOKEN` recebe o mesmo valor de `MAC_BRIDGE_TOKEN`. Roteiro em `automacao-ecac/docs/AGENTE-EQUIPE-MAC-AVISOS.md`. A seção abaixo descreve a ponte antiga, mantida só até a troca.
+
 ## Ponte (VPS)
 
 Copie `.env.example` para `.env`, configure os segredos e mantenha `WHATSAPP_DRY_RUN=true`. Depois:
