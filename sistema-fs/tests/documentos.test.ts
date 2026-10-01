@@ -12,10 +12,10 @@ test('acervo mantém PDF e protocolo idempotente, busca por CNPJ ou nome com ace
  assert.equal((await documents('solucoes')).length,1);assert.equal((await documents('47.733.961/0001-79'))[0].id,id);assert.ok((await documentContent(id))?.content.equals(pdf));
  await assert.rejects(archiveDocument(input,Buffer.from('%PDF-different')),/CONFLICT/);assert.equal(await documentContent('../secret'),null);
 });
-test('token válido sem número autorizado não libera documento',()=>{
+test('token válido sem número autorizado não libera documento',async()=>{
  const env={NODE_ENV:'test' as const,FS_AGENT_SERVICE_TOKEN:'secret-test',FS_AGENT_ALLOWED_PHONES:'5562982540748'};
  const req=(phone:string,token:string)=>new Request('https://fs.test/api/agent/documents',{headers:{authorization:`Bearer ${token}`,'x-fs-requester-phone':phone}});
- assert.equal(agentActor(req('5562982540748','secret-test'),env),'5562982540748');assert.equal(agentActor(req('5562000000000','secret-test'),env),null);assert.equal(agentActor(req('5562982540748','wrong'),env),null);
+ assert.equal(await agentActor(req('5562982540748','secret-test'),env),'5562982540748');assert.equal(await agentActor(req('5562000000000','secret-test'),env),null);assert.equal(await agentActor(req('5562982540748','wrong'),env),null);
 });
 test('busca pela razão social mantém fontes e pareceres da mesma empresa',async()=>{
  await archiveDocument({externalId:'test-source',cnpj:'47733961000179',company:'CNPJ 47733961000179',name:'Extrato Serpro.pdf',kind:'documento',createdAt:'2026-09-16T12:01:00Z'},Buffer.from('%PDF-source'));

@@ -2,7 +2,7 @@ import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { admin } from "better-auth/plugins";
 import { Pool } from "pg";
-import { ac, can, defaultRole, roleOf, roles, type Permissions, type Role } from "./roles";
+import { ac, can, defaultRole, isValidPhone, normalizePhone, parseAgentTasks, roleOf, roles, type Permissions, type Role } from "./roles";
 let pool: Pool | undefined;
 export function createFsAuth(allowProvisioning = false) {
   pool ??= new Pool({ connectionString: process.env.FS_AUTH_DATABASE_URL || process.env.DATABASE_URL, max: 3, connectionTimeoutMillis: 5000 });
@@ -12,7 +12,8 @@ export function createFsAuth(allowProvisioning = false) {
     secret: process.env.BETTER_AUTH_SECRET,
     trustedOrigins: (process.env.BETTER_AUTH_TRUSTED_ORIGINS || "").split(",").map(origin => origin.trim()).filter(Boolean),
     database: pool,
-    user: { modelName: "fs_auth_user" },
+    // phone/agentTasks: identidade e atribuições no agente WhatsApp (ver lib/auth/roles.ts); só o administrador altera.
+    user: { modelName: "fs_auth_user", additionalFields: { phone: { type: "string", required: false, input: false }, agentTasks: { type: "string", required: false, input: false } } },
     account: { modelName: "fs_auth_account" },
     session: { modelName: "fs_auth_session", expiresIn: 60 * 60 * 24 * 7, updateAge: 60 * 60 * 24, cookieCache: { enabled: false } },
     verification: { modelName: "fs_auth_verification" },
@@ -22,7 +23,14 @@ export function createFsAuth(allowProvisioning = false) {
     plugins: [admin({ ac, roles, defaultRole, adminRoles: ["admin"], bannedUserMessage: "Seu acesso ao sistema FS foi desativado. Procure o administrador." })],
     // O administrador não altera o próprio perfil nem desativa a própria conta: sempre resta ao menos um administrador ativo.
     hooks: { before: createAuthMiddleware(async ctx => {
-      if (ctx.path !== "/admin/set-role" && ctx.path !== "/admin/update-user") return;
+      const data = (ctx.body?.data ?? {}) as Record<string, unknown>;
+      if (ctx.path === "/admin/update-user") {
+        // WhatsApp e atribuições chegam normalizados: dígitos com DDI e só tarefas conhecidas.
+        if ("phone" in data) { const phone = normalizePhone(String(data.phone ?? "")); if (phone && !isValidPhone(phone)) throw new APIError("BAD_REQUEST", { message: "Informe o WhatsApp com DDD, por exemplo 62 99999-0000." }); data.phone = phone; }
+        if ("agentTasks" in data) data.agentTasks = parseAgentTasks(String(data.agentTasks ?? "")).join(",");
+      }
+      const sensitive = ctx.path === "/admin/set-role" || (ctx.path === "/admin/update-user" && ["role", "banned", "banReason", "banExpires", "email"].some(k => k in data));
+      if (!sensitive) return;
       const session = await getSessionFromCtx(ctx);
       if (session && String(ctx.body?.userId) === session.user.id) throw new APIError("BAD_REQUEST", { message: "Você não pode alterar o próprio perfil de acesso." });
     }) },

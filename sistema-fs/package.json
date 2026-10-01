@@ -14,6 +14,7 @@
     "test:diagnostico": "tsx --test tests/diagnostico.test.ts",
     "test:comercial": "tsx --test tests/comercial.test.ts",
     "test:controller": "tsx --test tests/controller.test.ts",
+    "test:avisos": "tsx --test tests/avisos.test.ts",
     "parecer:gerar": "tsx scripts/generate-fs-report.ts"
   },
   "dependencies": {

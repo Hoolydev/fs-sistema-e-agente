@@ -30,3 +30,17 @@ export function roleOf(user: { role?: string | null } | null | undefined): Role 
 }
 export function can(role: Role, permissions: Permissions) { return roles[role].authorize(permissions).success; }
 export const isReviewer = (role: Role) => can(role, { processo: ["revisar"] });
+
+// Atribuições de cada pessoa no agente WhatsApp, independentes do perfil; gravadas em fs_auth_user.agentTasks.
+export const agentTasks = ["comprovantes", "analises", "avisos"] as const;
+export type AgentTask = (typeof agentTasks)[number];
+export const agentTaskLabels: Record<AgentTask, string> = { comprovantes: "Enviar comprovantes de pagamento", analises: "Pedir análises pelo Mac", avisos: "Receber avisos do Controller" };
+export const parseAgentTasks = (value: string | null | undefined): AgentTask[] => (value ?? "").split(",").map(v => v.trim()).filter((v): v is AgentTask => (agentTasks as readonly string[]).includes(v));
+// Telefone do WhatsApp em dígitos com DDI; número brasileiro sem DDI recebe 55.
+export function normalizePhone(value: string | null | undefined) {
+  const digits = (value ?? "").replace(/\D/g, "");
+  if (!digits) return "";
+  return digits.length === 10 || digits.length === 11 ? `55${digits}` : digits;
+}
+export const isValidPhone = (digits: string) => /^\d{12,15}$/.test(digits);
+export const formatPhone = (digits: string) => digits.replace(/^55(\d{2})(\d{4,5})(\d{4})$/, "+55 $1 $2-$3") || "";

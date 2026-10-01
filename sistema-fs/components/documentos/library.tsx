@@ -9,8 +9,8 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '
 
 const date = (v: string) => new Date(v).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 function FileOptions({ group }: { group: CompanyDocuments }) {
-  return <>{[{ kind: 'parecer', label: 'Pareceres FS' }, { kind: 'documento', label: 'Documentos de apoio / Serpro' }].map(({ kind, label }) => {
-    const files = group.documents.filter(d => kind === 'parecer' ? d.kind === 'parecer' : d.kind !== 'parecer');
+  return <>{[{ kind: 'parecer', label: 'Pareceres FS' }, { kind: 'comprovante', label: 'Comprovantes de pagamento' }, { kind: 'documento', label: 'Documentos de apoio / Serpro' }].map(({ kind, label }) => {
+    const files = group.documents.filter(d => kind === 'documento' ? !['parecer', 'comprovante'].includes(d.kind) : d.kind === kind);
     return files.length ? <optgroup key={kind} label={label}>{files.map(d => <option key={d.id} value={d.id}>{d.name} · {date(d.createdAt)}</option>)}</optgroup> : null;
   })}</>;
 }

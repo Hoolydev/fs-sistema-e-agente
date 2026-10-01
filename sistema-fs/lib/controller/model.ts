@@ -37,7 +37,7 @@ export const fieldLabels: Record<keyof ProcessInput, string> = {
 };
 export type ControllerProcess = ProcessInput & {
   id: string; reviewState: ReviewState; reviewNote: string;
-  createdBy: string; createdAt: string; updatedBy: string; updatedAt: string; reviewedBy: string | null; reviewedAt: string | null;
+  createdBy: string; createdAt: string; updatedBy: string; updatedAt: string; reviewedBy: string | null; reviewedAt: string | null; updatedById: string | null;
 };
 export type AuditEntry = { id: string; actor: string; action: string; detail: string; createdAt: string };
 export const decisionSchema = z.object({ decision: z.enum(["aprovar", "ajustes"]), note: clean(500).default(""), version: z.string().max(40) })

@@ -58,3 +58,9 @@ Um usuário avulso: `FS_PROVISION_EMAIL`, `FS_PROVISION_NAME` e, opcionalmente, 
 ## Verificação
 
 `npm run test:controller` (perfis, validação, indicadores e leitura da planilha), `npm run typecheck`, `npx eslint .`, `npm run build`. Conferência manual em localhost:3100 com os três perfis: inclusão → pedido de ajustes → aprovação → exclusão, criação de usuário, troca de perfil, nova senha e desativação.
+
+## Agente WhatsApp: equipe, comprovantes e avisos (etapa 1, 30/09/2026)
+
+- Cada usuário pode ter **WhatsApp** e **atribuições no agente** (`fs_auth_user.phone`, `fs_auth_user.agentTasks`: `comprovantes`, `analises`, `avisos`), definidos pelo administrador em Configurações → Equipe. O agente identifica o número por `GET /api/agent/team` (token de serviço) e só aceita ações de números cadastrados; `FS_AGENT_ALLOWED_PHONES` continua como allowlist de transição.
+- `POST /api/agent/documents` aceita `kind: comprovante` em PDF, JPG ou PNG (tipo detectado pelo conteúdo, coluna `fs_documents.mime`); o nome da empresa é completado pelo Controller quando o agente só informa o CNPJ. Comprovantes aparecem no acervo e em "Documentos da empresa" no painel do processo.
+- Caixa de saída `fs_notifications`: o sistema grava avisos (registro aguardando revisão → revisores; aprovação/ajustes → quem salvou; comprovante recebido → revisores; resumo diário das contagens a partir das 08:00 de Brasília, gerado quando o agente consulta). O agente lê em `GET /api/agent/notifications` e confirma em `POST /api/agent/notifications/:id` (`{"sent":true}` ou `{"sent":false,"error":"..."}`). Chave de deduplicação impede repetir o mesmo aviso; após 5 falhas o aviso deixa de ser oferecido.

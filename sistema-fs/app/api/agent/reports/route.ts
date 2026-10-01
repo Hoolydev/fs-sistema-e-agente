@@ -7,7 +7,7 @@ import { boundedBody } from '@/lib/comercial/security';
 
 export const runtime = 'nodejs';
 export async function POST(request: Request) {
-  const actor = agentActor(request);
+  const actor = await agentActor(request);
   if (!actor) return new Response(null, { status: 401 });
   try {
     const body = JSON.parse((await boundedBody(request, 512 * 1024)).toString("utf8"));

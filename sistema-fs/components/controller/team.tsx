@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { Check, Copy, KeyRound, LoaderCircle, Minus, UserPlus } from "lucide-react";
+import { Check, Copy, KeyRound, LoaderCircle, MessageCircle, Minus, Save, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,10 +9,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge, Panel, Picker } from "@/components/fs/primitives";
 import { authClient } from "@/lib/auth/client";
-import { can, roleDescriptions, roleLabels, roleOf, roleOrder, type Permissions, type Role } from "@/lib/auth/roles";
+import { agentTaskLabels, agentTasks, can, formatPhone, normalizePhone, parseAgentTasks, roleDescriptions, roleLabels, roleOf, roleOrder, type AgentTask, type Permissions, type Role } from "@/lib/auth/roles";
 import { useController } from "./context";
 
-type Member = { id: string; name: string; email: string; role?: string | null; banned?: boolean | null };
+type Member = { id: string; name: string; email: string; role?: string | null; banned?: boolean | null; phone?: string | null; agentTasks?: string | null };
 const matrix: { label: string; permissions: Permissions }[] = [
   { label: "Consultar processos, documentos e diagnósticos", permissions: {} },
   { label: "Incluir e editar registros no Controller", permissions: { processo: ["incluir", "editar"] } },
@@ -31,6 +31,19 @@ function generatePassword() {
 async function listMembers(): Promise<Member[] | null> {
   const result = await authClient.admin.listUsers({ query: { limit: 200, sortBy: "name", sortDirection: "asc" } });
   return result.error ? null : result.data.users as Member[];
+}
+// WhatsApp e atribuições no agente: o que cada pessoa pode pedir e quais avisos recebe.
+function AgentForm({ member, busy, onSave }: { member: Member; busy: boolean; onSave: (data: { phone: string; agentTasks: string }) => Promise<boolean> }) {
+  const [phone, setPhone] = useState(member.phone ? formatPhone(member.phone) : "");
+  const [tasks, setTasks] = useState<AgentTask[]>(() => parseAgentTasks(member.agentTasks));
+  const dirty = normalizePhone(phone) !== (member.phone ?? "") || tasks.join(",") !== parseAgentTasks(member.agentTasks).join(",");
+  return (
+    <form className="ctrl-agent-form" onSubmit={async e => { e.preventDefault(); if (await onSave({ phone, agentTasks: tasks.join(",") })) setPhone(normalizePhone(phone) ? formatPhone(normalizePhone(phone)) : ""); }}>
+      <label className="ctrl-agent-phone"><MessageCircle size={14} /><Input aria-label={`WhatsApp de ${member.name}`} placeholder="WhatsApp com DDD" value={phone} onChange={e => setPhone(e.target.value)} maxLength={22} /></label>
+      {agentTasks.map(task => <label key={task} className="ctrl-agent-task"><input type="checkbox" checked={tasks.includes(task)} onChange={e => setTasks(e.target.checked ? [...tasks, task] : tasks.filter(t => t !== task))} /> {agentTaskLabels[task]}</label>)}
+      {dirty && <Button type="submit" variant="outline" disabled={busy}><Save size={14} /> Salvar</Button>}
+    </form>
+  );
 }
 export function TeamSettings() {
   const { data: session } = authClient.useSession();
@@ -140,11 +153,11 @@ export function TeamSettings() {
                 </div>
               </div>
             )}
-            <Panel title="Equipe do escritório" subtitle="Usuários com acesso ao sistema">
+            <Panel title="Equipe do escritório" subtitle="Usuários com acesso ao sistema; o WhatsApp cadastrado é o que o agente reconhece">
               {error && <p role="alert" className="ctrl-alert ctrl-inset">{error}</p>}
               <Table className="process-table">
                 <TableHeader>
-                  <TableRow>{["Pessoa", "Perfil", "Situação", ""].map((t, i) => <TableHead key={i}>{t}</TableHead>)}</TableRow>
+                  <TableRow>{["Pessoa", "Perfil", "WhatsApp e atribuições no agente", "Situação", ""].map((t, i) => <TableHead key={i}>{t}</TableHead>)}</TableRow>
                 </TableHeader>
                 <TableBody>
                   {members.map(m => {
@@ -155,6 +168,7 @@ export function TeamSettings() {
                         <TableCell>
                           {self ? roleLabels[current] : <Picker label={`Perfil de ${m.name}`} value={roleLabels[current]} options={roleOrder.map(r => roleLabels[r])} onChange={label => { const next = labelToRole(label); if (next !== current) void run(`perfil-${m.id}`, () => authClient.admin.setRole({ userId: m.id, role: next }), "Perfil atualizado."); }} />}
                         </TableCell>
+                        <TableCell><AgentForm member={m} busy={!!busy} onSave={data => run(`agente-${m.id}`, () => authClient.admin.updateUser({ userId: m.id, data }), "WhatsApp e atribuições salvos.")} /></TableCell>
                         <TableCell><Badge>{m.banned ? "Desativado" : "Ativo"}</Badge></TableCell>
                         <TableCell>
                           {!self && (

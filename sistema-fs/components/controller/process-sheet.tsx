@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Check, LoaderCircle, Pencil, RotateCcw, Save, Trash2 } from "lucide-react";
+import { Check, FileText, LoaderCircle, Pencil, RotateCcw, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,19 +38,22 @@ function ProcessPanel({ process }: { process: ControllerProcess | null }) {
   const [editing, setEditing] = useState(!process);
   const [draft, setDraft] = useState<Draft>(() => process ? draftOf(process) : blank());
   const [history, setHistory] = useState<AuditEntry[]>([]);
+  const [files, setFiles] = useState<{ id: string; name: string; kind: string; createdAt: string }[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [invalid, setInvalid] = useState<string[]>([]);
   const [adjusting, setAdjusting] = useState(false);
   const [note, setNote] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const id = process?.id;
+  const id = process?.id, cnpj = process?.cnpj;
   useEffect(() => {
     if (!id) return;
     let active = true;
     fetch(`/api/controller/processos/${id}`, { cache: "no-store" }).then(r => r.ok ? r.json() : { history: [] }).then(d => { if (active) setHistory(d.history ?? []); }).catch(() => {});
+    // Acervo da empresa: pareceres, documentos de apoio e comprovantes enviados pelo WhatsApp.
+    fetch(`/api/documentos?q=${cnpj}`, { cache: "no-store" }).then(r => r.ok ? r.json() : { documents: [] }).then(d => { if (active) setFiles((d.documents ?? []).filter((f: { cnpj: string }) => f.cnpj === cnpj)); }).catch(() => {});
     return () => { active = false; };
-  }, [id]);
+  }, [id, cnpj]);
   const suggestions = useMemo(() => ({
     object: [...new Set([...objectOptions, ...processes.map(p => p.object)])], admStatus: [...new Set([...admStatusOptions, ...processes.map(p => p.admStatus)])], dispatchStatus: [...new Set([...dispatchOptions, ...processes.map(p => p.dispatchStatus)])],
   }), [processes]);
@@ -141,6 +144,8 @@ function ProcessPanel({ process }: { process: ControllerProcess | null }) {
               {allowed.review && process.reviewState !== "aprovado" && <Button disabled={busy} onClick={() => void decide("aprovar")}><Check size={16} /> Aprovar</Button>}
             </div>
           )}
+          <h3>Documentos da empresa</h3>
+          {files.length ? <ul className="ctrl-files">{files.map(f => <li key={f.id}><FileText size={15} /><a href={`/api/documentos/${f.id}`} target="_blank" rel="noreferrer">{f.name}</a><small>{{ parecer: "Parecer", comprovante: "Comprovante", documento: "Documento" }[f.kind] ?? f.kind} · {formatDay(f.createdAt.slice(0, 10))}</small></li>)}</ul> : <p className="muted">Nenhum documento arquivado para este CNPJ.</p>}
           <h3>Histórico</h3>
           <div className="timeline">
             {history.map(h => <div key={h.id}><i /><strong>{h.actor} {h.action}</strong>{h.detail && <p>{h.detail}</p>}<small>{moment(h.createdAt)}</small></div>)}
