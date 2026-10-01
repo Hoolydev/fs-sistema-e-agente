@@ -9,6 +9,14 @@ import { OrchestratorService } from "./orchestrator/service.js";
 import { RedisPendingRequestStore } from "./orchestrator/pending-request-store.js";
 import { BullMqRequestPublisher, redisConnectionFromUrl } from "./queue/request-queue.js";
 import { createWhatsAppGateway } from "./whatsapp/client.js";
+import { SystemPlatform } from "./system/platform.js";
+import { RedisMacJobQueue } from "./mac/queue.js";
+import { startFallbackWatch } from "./mac/fallback.js";
+import { startNotificationPoller } from "./notifications/poller.js";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { MacJob } from "./domain/types.js";
 
 if (existsSync(".env")) process.loadEnvFile(".env");
 
@@ -18,17 +26,28 @@ const publisher = new BullMqRequestPublisher(redisConnectionFromUrl(config.REDIS
 const stateRedis = new Redis(redisConnectionFromUrl(config.REDIS_URL));
 const whatsapp = createWhatsAppGateway(config, logger);
 const pendingRequests = new RedisPendingRequestStore(stateRedis);
-const orchestrator = new OrchestratorService(
-  config,
-  publisher,
-  whatsapp,
-  pendingRequests,
-  logger,
-  config.FS_SYSTEM_URL && config.FS_SYSTEM_API_TOKEN ? new SystemDocumentClient(config, whatsapp) : undefined,
-);
-const app = await buildApp({ config, logger, orchestrator });
+const systemConfigured = Boolean(config.FS_SYSTEM_URL && config.FS_SYSTEM_API_TOKEN);
+const documents = systemConfigured ? new SystemDocumentClient(config, whatsapp) : undefined;
+const platform = systemConfigured ? new SystemPlatform(config) : undefined;
+// Fila do Mac só existe com o token do conector configurado; sem ele, pedidos seguem pelo worker (Serpro/RPA).
+const macQueue = config.MAC_BRIDGE_TOKEN ? new RedisMacJobQueue(stateRedis) : undefined;
+const orchestrator = new OrchestratorService({ config, queue: publisher, whatsapp, pendingRequests, logger, ...(documents ? { archive: documents } : {}), ...(platform ? { platform } : {}), ...(macQueue ? { macQueue } : {}) });
+const macArchive = documents ? {
+  // Parecer vindo do Mac entra no acervo pelo mesmo caminho dos pareceres do worker (protocolo = id do pedido).
+  async archivePdf(job: MacJob, content: Buffer, filename: string) {
+    const folder = await mkdtemp(join(tmpdir(), "fs-mac-archive-")), localPath = join(folder, filename);
+    try {
+      await writeFile(localPath, content, { mode: 0o600 });
+      await documents.archive({ requestId: job.id, sourceMessageId: job.id, requesterPhone: job.requesterPhone, cnpj: job.cnpj, period: job.createdAt.slice(0, 7), documentType: "diagnostico_fiscal" }, { localPath, filename, mimeType: "application/pdf", sha256: job.sha256 ?? "", obtainedAt: new Date().toISOString() });
+    } finally { await rm(folder, { recursive: true, force: true }).catch(() => {}); }
+  },
+} : undefined;
+const app = await buildApp({ config, logger, orchestrator, ...(macQueue ? { mac: { queue: macQueue, whatsapp, ...(platform ? { platform } : {}), ...(macArchive ? { archive: macArchive } : {}) } } : {}) });
+const stopPoller = platform ? startNotificationPoller(platform, whatsapp, logger, config.NOTIFICATIONS_POLL_MS) : undefined;
+const stopFallback = macQueue ? startFallbackWatch(config, macQueue, pendingRequests, whatsapp, logger) : undefined;
 
 app.addHook("onClose", async () => {
+  stopPoller?.(); stopFallback?.();
   await publisher.close();
   await stateRedis.quit();
 });

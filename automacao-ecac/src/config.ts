@@ -24,6 +24,13 @@ const configSchema = z.object({
   AUTHORIZED_PHONE_NUMBERS: z.string().default(""),
   FS_SYSTEM_URL: z.string().default(""),
   FS_SYSTEM_API_TOKEN: z.string().default(""),
+  // Fila do Mac dentro do agente (substitui a ponte fs-mac-bridge): bearer usado pelo conector do Mac.
+  MAC_BRIDGE_TOKEN: z.string().default(""),
+  // Pedido parado sem o Mac por este tempo: o agente oferece a consulta preliminar pelo Serpro (cobrada). 0 desativa.
+  MAC_FALLBACK_AFTER_MS: z.coerce.number().int().nonnegative().default(2 * 60 * 60 * 1000),
+  NOTIFICATIONS_POLL_MS: z.coerce.number().int().positive().default(60_000),
+  TEAM_CACHE_MS: z.coerce.number().int().positive().default(60_000),
+  MEDIA_MAX_BYTES: z.coerce.number().int().positive().default(3 * 1024 * 1024),
   LLM_PROVIDER: z.enum(["disabled", "openai"]).default("disabled"),
   LLM_MODEL: z.string().default("gpt-5.5"),
   LLM_API_KEY_FILE: z.string().default("/run/secrets/openai_api_key"),

@@ -57,6 +57,8 @@ interface ZApiPayload {
   isStatusReply?: boolean;
   broadcast?: boolean;
   text?: { message?: string };
+  image?: { imageUrl?: string; mimeType?: string; caption?: string };
+  document?: { documentUrl?: string; mimeType?: string; fileName?: string; title?: string; caption?: string };
 }
 
 export function extractZApiInboundMessages(
@@ -82,13 +84,11 @@ export function extractZApiInboundMessages(
 
   const moment = Number(message.momment);
   const timestampMs = moment < 1_000_000_000_000 ? moment * 1000 : moment;
-  return [
-    {
-      messageId: message.messageId,
-      from: message.phone,
-      timestamp: new Date(timestampMs),
-      type: message.text?.message ? "text" : "unsupported",
-      ...(message.text?.message ? { text: message.text.message } : {}),
-    },
-  ];
+  const base = { messageId: message.messageId, from: message.phone, timestamp: new Date(timestampMs) };
+  if (message.text?.message) return [{ ...base, type: "text", text: message.text.message }];
+  // Foto ou arquivo (comprovantes): só a URL é guardada; o conteúdo é baixado e validado depois.
+  const image = message.image?.imageUrl, document = message.document?.documentUrl;
+  if (image && /^https:\/\//.test(image)) return [{ ...base, type: "image", media: { url: image, mimeType: message.image?.mimeType ?? "image/jpeg", ...(message.image?.caption ? { caption: message.image.caption } : {}) } }];
+  if (document && /^https:\/\//.test(document)) return [{ ...base, type: "document", media: { url: document, mimeType: message.document?.mimeType ?? "application/octet-stream", fileName: message.document?.fileName ?? message.document?.title ?? "documento", ...(message.document?.caption ? { caption: message.document.caption } : {}) } }];
+  return [{ ...base, type: "unsupported" }];
 }

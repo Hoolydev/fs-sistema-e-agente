@@ -1,5 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
-import Fastify from "fastify";
+import Fastify, { type FastifyInstance } from "fastify";
 import rawBody from "fastify-raw-body";
 import { z } from "zod";
 import type { AppConfig } from "./config.js";
@@ -7,6 +7,7 @@ import type { AppLogger } from "./logger.js";
 import type { OrchestratorService } from "./orchestrator/service.js";
 import { extractInboundMessages, extractZApiInboundMessages } from "./whatsapp/payload.js";
 import { verifyMetaSignature } from "./whatsapp/signature.js";
+import { registerMacRoutes, type MacRouteDependencies } from "./mac/routes.js";
 
 const verificationQuery = z.object({
   "hub.mode": z.string(),
@@ -19,6 +20,7 @@ export interface AppDependencies {
   logger: AppLogger;
   orchestrator: Pick<OrchestratorService, "handle">;
   readiness?: () => Promise<boolean>;
+  mac?: Omit<MacRouteDependencies, "config" | "logger">;
 }
 
 export async function buildApp(dependencies: AppDependencies) {
@@ -32,6 +34,8 @@ export async function buildApp(dependencies: AppDependencies) {
   });
 
   app.get("/health", async () => ({ status: "ok" }));
+  // O logger pino concreto muda o tipo genérico da instância; as rotas do Mac só usam get/post/addHook.
+  if (dependencies.mac) await registerMacRoutes(app as unknown as FastifyInstance, { config, logger, ...dependencies.mac });
   app.get("/ready", async (_request, reply) => {
     const ready = (await dependencies.readiness?.()) ?? true;
     return reply.code(ready ? 200 : 503).send({ status: ready ? "ready" : "not_ready" });
@@ -77,8 +81,9 @@ export async function buildApp(dependencies: AppDependencies) {
     },
   );
 
-  app.post<{ Params: { token: string } }>(
-    "/webhooks/zapi/:token",
+  // "/zapi/:token" é o caminho que a Z-API já chama (antiga ponte do Mac); manter os dois evita reconfigurar a instância.
+  for (const path of ["/webhooks/zapi/:token", "/zapi/:token"]) app.post<{ Params: { token: string } }>(
+    path,
     { logLevel: "silent" },
     async (request, reply) => {
       if (config.WHATSAPP_PROVIDER !== "zapi") {

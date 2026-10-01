@@ -89,7 +89,7 @@ describe("OrchestratorService", () => {
     inbound.from = "5562888888888";
     await service.handle(inbound);
     expect(publisher.requests).toHaveLength(0);
-    expect(whatsapp.texts.at(-1)).toContain("não está autorizado");
+    expect(whatsapp.texts.at(-1)).toContain("não está cadastrado na equipe");
   });
 
   it("queues a diagnostic requested in natural language after confirmation", async () => {
