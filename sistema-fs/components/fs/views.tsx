@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import CommercialWorkspace from "@/components/comercial/workspace";
 import { TeamSettings } from "@/components/controller/team";
@@ -7,6 +7,7 @@ import { useController } from "@/components/controller/context";
 import { deadlineQueue } from "@/lib/controller/metrics";
 import { awaitingDispatch, daysUntil, fieldLabels, formatDay, reviewLabels, reviewStates, searchKey, type ControllerProcess } from "@/lib/controller/model";
 import { formatCnpj } from "@/lib/diagnostico/model";
+import { documentChecklist, requiredDocumentTypes } from "@/lib/documentos/tipos";
 import { ArrowRight, ArrowUpRight, BriefcaseBusiness, Building2, Calculator, CalendarDays, Check, ChevronRight, CircleCheck, Clock3, Download, FileChartColumn, FolderOpen, Plus, RotateCcw, Scale, Search, ShieldCheck, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -315,51 +316,68 @@ function ControllerView() {
   );
 }
 function Administrative() {
-  const { processes, open, loading, error } = useController();
+  const { processes, companies, allowed, openCompany, loading, error } = useController();
   const [query, setQuery] = useState("");
+  const [docs, setDocs] = useState<{ cnpj: string; docType?: string | null; kind: string }[]>([]);
+  useEffect(() => {
+    let active = true;
+    fetch("/api/documentos", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { documents: [] })).then((d) => { if (active) setDocs(d.documents ?? []); }).catch(() => {});
+    return () => { active = false; };
+  }, [processes, companies]);
   if (loading || error) return <DataState />;
-  const companies = [...processes.reduce((map, p) => map.set(p.cnpj, [...(map.get(p.cnpj) ?? []), p]), new Map<string, ControllerProcess[]>()).values()]
-    .map((list) => ({ cnpj: list[0].cnpj, name: list[0].company, list, updatedOn: list.map((p) => p.updatedOn ?? "").sort().at(-1) || null }))
-    .sort((a, b) => a.name.localeCompare(b.name));
   const term = searchKey(query);
-  const rows = companies.filter((c) => !term || searchKey(c.name).includes(term) || c.cnpj.includes(term));
+  const rows = companies.filter((c) => !term || searchKey(c.name).includes(term) || c.cnpj.includes(term)).map((c) => {
+    const own = processes.filter((p) => p.cnpj === c.cnpj), checklist = documentChecklist(docs.filter((d) => d.cnpj === c.cnpj));
+    return { ...c, own, done: checklist.filter((i) => i.done).length, total: checklist.length, updatedOn: own.map((p) => p.updatedOn ?? "").sort().at(-1) || null };
+  });
+  const complete = companies.filter((c) => documentChecklist(docs.filter((d) => d.cnpj === c.cnpj)).every((i) => i.done)).length;
   return (
-    <Panel title="Base de clientes" subtitle="Empresas com processos registrados no Controller">
-      <div className="table-toolbar">
-        <label className="search-field">
-          <Search size={16} />
-          <Input aria-label="Buscar empresa ou CNPJ" placeholder="Buscar empresa ou CNPJ..." value={query} onChange={(e) => setQuery(e.target.value)} />
-        </label>
-        <span className="small-label">{companies.length} {companies.length === 1 ? "empresa" : "empresas"}</span>
-      </div>
-      <Table className="process-table">
-        <TableHeader>
-          <TableRow>
-            {["Empresa", "CNPJ", "Processos", "Status", "Última atualização", ""].map((s, i) => <TableHead key={i}>{s}</TableHead>)}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((c) => (
-            <TableRow key={c.cnpj}>
-              <TableCell>
-                <button className="company-cell" onClick={() => open(c.list[0])}>
-                  <span className="company-icon"><Building2 size={19} /></span>
-                  <span><strong>{c.name}</strong><small>{c.list[0].object}</small></span>
-                </button>
-              </TableCell>
-              <TableCell>{formatCnpj(c.cnpj)}</TableCell>
-              <TableCell>{c.list.length}</TableCell>
-              <TableCell><Badge>{c.list[0].dispatchStatus}</Badge></TableCell>
-              <TableCell>{formatDay(c.updatedOn)}</TableCell>
-              <TableCell>
-                <button className="row-action" aria-label={`Abrir processo de ${c.name}`} onClick={() => open(c.list[0])}><ChevronRight size={17} /></button>
-              </TableCell>
+    <>
+      <Summary
+        items={[
+          { label: "Empresas", value: String(companies.length), note: `${companies.filter((c) => c.registered).length} com cadastro próprio`, icon: Building2 },
+          { label: "Documentação completa", value: String(complete), note: `${requiredDocumentTypes.length} documentos obrigatórios por empresa`, icon: CircleCheck },
+          { label: "Documentação pendente", value: String(companies.length - complete), note: "Empresas com algum documento faltando", icon: TriangleAlert },
+          { label: "No Controller", value: String(new Set(processes.map((p) => p.cnpj)).size), note: "Empresas com processo em andamento", icon: BriefcaseBusiness },
+        ]}
+      />
+      <Panel title="Base de clientes" subtitle="Empresas cadastradas; é daqui que elas seguem para o Controller" action={allowed.create ? <Button onClick={() => openCompany("nova")}><Plus size={16} />Nova empresa</Button> : undefined}>
+        <div className="table-toolbar">
+          <label className="search-field">
+            <Search size={16} />
+            <Input aria-label="Buscar empresa ou CNPJ" placeholder="Buscar empresa ou CNPJ..." value={query} onChange={(e) => setQuery(e.target.value)} />
+          </label>
+          <span className="small-label">{companies.length} {companies.length === 1 ? "empresa" : "empresas"}</span>
+        </div>
+        <Table className="process-table">
+          <TableHeader>
+            <TableRow>
+              {["Empresa", "CNPJ", "Documentação", "Processos", "Última atualização", ""].map((s, i) => <TableHead key={i}>{s}</TableHead>)}
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-      {!rows.length && <div className="empty-state"><Search /><strong>{companies.length ? "Nenhuma empresa encontrada" : "Nenhuma empresa registrada"}</strong></div>}
-    </Panel>
+          </TableHeader>
+          <TableBody>
+            {rows.map((c) => (
+              <TableRow key={c.cnpj}>
+                <TableCell>
+                  <button className="company-cell" onClick={() => openCompany(c.cnpj)}>
+                    <span className="company-icon"><Building2 size={19} /></span>
+                    <span><strong>{c.name}</strong><small>{c.registered ? `Cadastrada por ${c.createdBy}` : "Presente só no Controller"}</small></span>
+                  </button>
+                </TableCell>
+                <TableCell>{formatCnpj(c.cnpj)}</TableCell>
+                <TableCell><Badge>{c.done === c.total ? "Completa" : `${c.done} de ${c.total}`}</Badge></TableCell>
+                <TableCell>{c.own.length}</TableCell>
+                <TableCell>{formatDay(c.updatedOn)}</TableCell>
+                <TableCell>
+                  <button className="row-action" aria-label={`Abrir empresa ${c.name}`} onClick={() => openCompany(c.cnpj)}><ChevronRight size={17} /></button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+        {!rows.length && <div className="empty-state"><Search /><strong>{companies.length ? "Nenhuma empresa encontrada" : "Nenhuma empresa cadastrada"}</strong></div>}
+      </Panel>
+    </>
   );
 }
 function EmptyModule({ screen }: { screen: string }) {

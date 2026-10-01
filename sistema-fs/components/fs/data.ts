@@ -65,7 +65,7 @@ export const descriptions: Record<string, string> = {
   configuracoes: "Seu acesso, a equipe e as permissões do sistema.",
 };
 const tones: Record<string, string> = {
-  Revisado: "green", PROTOCOLADO: "green", Ativo: "green",
+  Revisado: "green", PROTOCOLADO: "green", Ativo: "green", Completa: "green",
   "TEM DESPACHO": "blue",
   "Ajustes solicitados": "red", Desativado: "red", "Contagem vencida": "red",
   ARQUIVADO: "gray", "NÃO INICIADO": "gray",

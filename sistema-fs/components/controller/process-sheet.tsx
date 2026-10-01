@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Check, FileText, LoaderCircle, Pencil, RotateCcw, Save, Trash2 } from "lucide-react";
+import { Check, LoaderCircle, Pencil, RotateCcw, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,16 +9,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/fs/primitives";
 import { formatCnpj } from "@/lib/diagnostico/model";
 import { DEADLINE_DAYS, addDays, admStatusOptions, dispatchOptions, fieldLabels, formatDay, objectOptions, reviewLabels, today, type AuditEntry, type ControllerProcess, type ProcessInput } from "@/lib/controller/model";
-import { useController } from "./context";
+import { useController, type NewProcess } from "./context";
+import { CompanyDocuments } from "@/components/empresas/company-documents";
 
 type Draft = Record<keyof ProcessInput, string>;
-const blank = (): Draft => ({ company: "", cnpj: "", object: objectOptions[0], admStatus: admStatusOptions[0], protocolDate: "", deadline: "", processNumber: "", updatedOn: today(), dispatchStatus: dispatchOptions[0], notes: "" });
+const blank = (prefill?: NewProcess): Draft => ({ company: prefill?.company ?? "", cnpj: prefill?.cnpj ? formatCnpj(prefill.cnpj) : "", object: objectOptions[0], admStatus: admStatusOptions[0], protocolDate: "", deadline: "", processNumber: "", updatedOn: today(), dispatchStatus: dispatchOptions[0], notes: "" });
 const draftOf = (p: ControllerProcess): Draft => ({ company: p.company, cnpj: formatCnpj(p.cnpj), object: p.object, admStatus: p.admStatus, protocolDate: p.protocolDate ?? "", deadline: p.deadline ?? "", processNumber: p.processNumber, updatedOn: p.updatedOn ?? "", dispatchStatus: p.dispatchStatus, notes: p.notes });
 const moment = (iso: string | null) => iso ? new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Sao_Paulo" }).format(new Date(iso)) : "—";
 
 export function ProcessSheet() {
   const { selected, open, allowed } = useController();
-  const process = selected && selected !== "novo" ? selected : null;
+  const process = selected && selected !== "novo" && !("novo" in selected) ? selected : null;
+  const prefill = selected && selected !== "novo" && "novo" in selected ? selected : undefined;
   return (
     <Sheet open={!!selected} onOpenChange={v => !v && open(null)}>
       <SheetContent className="detail-sheet">
@@ -28,37 +30,36 @@ export function ProcessSheet() {
           <SheetDescription>{process ? `${formatCnpj(process.cnpj)} · ${process.processNumber || "sem nº de processo"}` : allowed.review ? "O registro entra como revisado por você." : "O registro será enviado para revisão antes de valer como revisado."}</SheetDescription>
         </SheetHeader>
         {/* A chave reinicia formulário e mensagens ao trocar de registro ou quando ele muda de versão. */}
-        {selected && <ProcessPanel key={process ? `${process.id}:${process.updatedAt}` : "novo"} process={process} />}
+        {selected && <ProcessPanel key={process ? `${process.id}:${process.updatedAt}` : `novo:${prefill?.cnpj ?? ""}`} process={process} prefill={prefill} />}
       </SheetContent>
     </Sheet>
   );
 }
-function ProcessPanel({ process }: { process: ControllerProcess | null }) {
-  const { open, reload, allowed, processes, notify } = useController();
+function ProcessPanel({ process, prefill }: { process: ControllerProcess | null; prefill?: NewProcess }) {
+  const { open, reload, allowed, processes, companies, notify } = useController();
   const [editing, setEditing] = useState(!process);
-  const [draft, setDraft] = useState<Draft>(() => process ? draftOf(process) : blank());
+  const [draft, setDraft] = useState<Draft>(() => process ? draftOf(process) : blank(prefill));
   const [history, setHistory] = useState<AuditEntry[]>([]);
-  const [files, setFiles] = useState<{ id: string; name: string; kind: string; createdAt: string }[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [invalid, setInvalid] = useState<string[]>([]);
   const [adjusting, setAdjusting] = useState(false);
   const [note, setNote] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const id = process?.id, cnpj = process?.cnpj;
+  const id = process?.id;
   useEffect(() => {
     if (!id) return;
     let active = true;
     fetch(`/api/controller/processos/${id}`, { cache: "no-store" }).then(r => r.ok ? r.json() : { history: [] }).then(d => { if (active) setHistory(d.history ?? []); }).catch(() => {});
-    // Acervo da empresa: pareceres, documentos de apoio e comprovantes enviados pelo WhatsApp.
-    fetch(`/api/documentos?q=${cnpj}`, { cache: "no-store" }).then(r => r.ok ? r.json() : { documents: [] }).then(d => { if (active) setFiles((d.documents ?? []).filter((f: { cnpj: string }) => f.cnpj === cnpj)); }).catch(() => {});
     return () => { active = false; };
-  }, [id, cnpj]);
+  }, [id]);
   const suggestions = useMemo(() => ({
     object: [...new Set([...objectOptions, ...processes.map(p => p.object)])], admStatus: [...new Set([...admStatusOptions, ...processes.map(p => p.admStatus)])], dispatchStatus: [...new Set([...dispatchOptions, ...processes.map(p => p.dispatchStatus)])],
   }), [processes]);
   const set = (key: keyof Draft, value: string) => setDraft(d => {
     const next = { ...d, [key]: value };
+    // Empresa escolhida do cadastro preenche o CNPJ.
+    if (key === "company") { const known = companies.find(c => c.name === value.trim().toUpperCase()); if (known) next.cnpj = formatCnpj(known.cnpj); }
     // Contagem acompanha o protocolo enquanto ninguém a ajustar manualmente.
     if (key === "protocolDate" && value && (!d.deadline || (d.protocolDate && d.deadline === addDays(d.protocolDate, DEADLINE_DAYS)))) next.deadline = addDays(value, DEADLINE_DAYS);
     return next;
@@ -104,7 +105,7 @@ function ProcessPanel({ process }: { process: ControllerProcess | null }) {
       {error && <p role="alert" className="ctrl-alert">{error}</p>}
       {editing ? (
         <form className="fs-form ctrl-form" onSubmit={save}>
-          {field("company", { required: true, placeholder: "Razão social" })}
+          {field("company", { required: true, placeholder: "Razão social", list: companies.map(c => c.name) })}
           {field("cnpj", { required: true, placeholder: "00.000.000/0001-00" })}
           {field("object", { required: true, list: suggestions.object })}
           {field("admStatus", { required: true, list: suggestions.admStatus })}
@@ -145,7 +146,7 @@ function ProcessPanel({ process }: { process: ControllerProcess | null }) {
             </div>
           )}
           <h3>Documentos da empresa</h3>
-          {files.length ? <ul className="ctrl-files">{files.map(f => <li key={f.id}><FileText size={15} /><a href={`/api/documentos/${f.id}`} target="_blank" rel="noreferrer">{f.name}</a><small>{{ parecer: "Parecer", comprovante: "Comprovante", documento: "Documento" }[f.kind] ?? f.kind} · {formatDay(f.createdAt.slice(0, 10))}</small></li>)}</ul> : <p className="muted">Nenhum documento arquivado para este CNPJ.</p>}
+          <CompanyDocuments cnpj={process.cnpj} />
           <h3>Histórico</h3>
           <div className="timeline">
             {history.map(h => <div key={h.id}><i /><strong>{h.actor} {h.action}</strong>{h.detail && <p>{h.detail}</p>}<small>{moment(h.createdAt)}</small></div>)}

@@ -3361,3 +3361,105 @@ h1 {
   color: #8a949d;
   white-space: nowrap;
 }
+.docs-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.docs-checklist {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 14px;
+}
+.docs-checklist li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: #7d8b98;
+}
+.docs-checklist li svg {
+  color: #c4ccd4;
+  flex-shrink: 0;
+}
+.docs-checklist li.done {
+  color: #34485d;
+}
+.docs-checklist li.done svg {
+  color: #438d73;
+}
+.docs-checklist li a {
+  margin-left: auto;
+  font-size: 11px;
+  color: #9a7737;
+}
+.docs-checklist li small {
+  margin-left: auto;
+  font-size: 10px;
+  color: #ac873d;
+}
+.docs-upload {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border: 1px dashed #d5dce3;
+  border-radius: 8px;
+  background: #fafbfc;
+}
+.docs-pick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #566575;
+  cursor: pointer;
+}
+.docs-pick input {
+  display: none;
+}
+.docs-file {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.docs-file > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.docs-file select {
+  font-size: 12px;
+  padding: 5px 6px;
+  border: 1px solid #dce3e9;
+  border-radius: 4px;
+  background: #fff;
+}
+.docs-file button {
+  color: #8a949d;
+  padding: 4px;
+}
+.docs-upload > button {
+  align-self: flex-start;
+}
+.ctrl-link {
+  color: #34485d;
+  font-size: 13px;
+  text-align: left;
+}
+.ctrl-link:hover {
+  color: #a57f3e;
+}
+.ctrl-files li > svg:last-child {
+  color: #a1aebb;
+}
+@media (max-width: 520px) {
+  .docs-checklist {
+    grid-template-columns: 1fr;
+  }
+}

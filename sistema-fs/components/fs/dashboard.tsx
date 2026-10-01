@@ -4,6 +4,7 @@ import Link from "next/link";
 import { UserMenu } from "@/components/auth/user-menu";
 import { ControllerProvider, useController } from "@/components/controller/context";
 import { ProcessSheet } from "@/components/controller/process-sheet";
+import { CompanySheet } from "@/components/empresas/company-sheet";
 import { deadlineQueue } from "@/lib/controller/metrics";
 import { daysUntil, formatDay, reviewLabels, searchKey as normalizeSearch } from "@/lib/controller/model";
 import ModuleView from "./views";
@@ -151,6 +152,7 @@ function Shell({ screen, children }: { screen: string; children?: ReactNode }) {
         </main>
       </div>
       <ProcessSheet />
+      <CompanySheet />
       <Sheet open={notifications} onOpenChange={setNotifications}>
         <SheetContent className="detail-sheet">
           <SheetHeader>
