@@ -1,6 +1,6 @@
 # Agente WhatsApp: equipe, comprovantes, Mac e avisos
 
-Implementado em 30/09/2026 (código), ainda não implantado na VPS. Decisões de Fernando/Oliveira: atribuições pessoa a pessoa cadastradas no sistema; comprovantes só arquivados na empresa; análises pelo WhatsApp sempre pelo Mac, com Serpro de reserva após 2 h e aviso de cobrança; resumo diário das contagens às 08:00 aos revisores.
+Implementado em 30/09/2026 e implantado na VPS em 01/10/2026 (agente no lugar da ponte; ponte parada, não removida; `WHATSAPP_DRY_RUN=true` até a homologação; assinatura Z-API ainda vencida). Decisões de Fernando/Oliveira: atribuições pessoa a pessoa cadastradas no sistema; comprovantes só arquivados na empresa; análises pelo WhatsApp sempre pelo Mac, com Serpro de reserva após 2 h e aviso de cobrança; resumo diário das contagens às 08:00 aos revisores.
 
 ## O que muda
 
@@ -20,6 +20,10 @@ Implementado em 30/09/2026 (código), ainda não implantado na VPS. Decisões de
 5. Parar a ponte (`docker stop fs-mac-bridge`) só depois de o agente responder em `https://api.fssolucoestributarias.com.br/zapi/<token>`; o pedido `inflight` antigo da ponte (16/09) não migra.
 6. No Mac: `secrets/bridge.env` com `BRIDGE_URL=http://127.0.0.1:3000` (túnel SSH para a VPS) e o novo token; reiniciar o conector.
 7. Teste com `WHATSAPP_DRY_RUN=true` (mensagens só no log), depois `false` com os números cadastrados.
+
+## Rede na VPS
+
+O `api` entra na rede `coolify` para o Traefik alcançá-lo. Nessa rede, os nomes `redis` e `postgres` resolvem para os serviços do próprio Coolify (que exigem senha: erro `NOAUTH`). Por isso `docker-compose.webhook.yml` lê também `.env.api-rede`, gerado na VPS com `REDIS_URL` e `DATABASE_URL` apontando para `fs-automacao-ecac-redis-1` e `fs-automacao-ecac-postgres-1`. Regerar esse arquivo se a senha do Postgres mudar.
 
 ## Verificação
 
