@@ -85,7 +85,7 @@ export function buildOpinion(input: DiagnosticReport) {
     ["Entrada sobre saldo original", s ? `Meses 1 a ${s.entryMonths}` : "Não definido", installmentText(m.entry)],
     ["Saldo após desconto e entrada", s ? `Meses ${s.entryMonths + 1} a ${s.entryMonths + s.balanceMonths}` : "Não definido", installmentText(m.balance)],
   ];
-  const hl = m.health, declaration = report.rfbDeclaration, rfbDebtCount = report.debts.filter(d => d.origin === "RFB").length;
+  const hl = m.health, declaration = report.rfbDeclaration, rfbDebts = report.debts.filter(d => d.origin === "RFB"), rfbDebtCount = rfbDebts.length, rfbSource = report.sources.find(s => s.id === "rfb");
   const managedPgfn = m.debts.filter(d => pgfnSituation(d.status) !== "cobranca");
   const pgfnDetail = !managedPgfn.length ? `${m.totals.count} inscrições ativas` : managedPgfn.length === m.totals.count ? `${m.totals.count} inscrições · todas negociadas/suspensas` : `${m.totals.count} inscrições · ${managedPgfn.length} negociadas/suspensas`;
   const healthValue = hl.score === null ? "Não avaliado" : `${hl.score}/100`, healthDetail = hl.band ? `${hl.band.label}${hl.partial ? " · parcial" : ""}` : "Fontes insuficientes";
@@ -138,7 +138,10 @@ export function buildOpinion(input: DiagnosticReport) {
         ["Objeto do parecer", "Diagnóstico do passivo, simulação por inscrição, desembolso e frentes de regularização."], ["Data-base / natureza", `${shortDate(report.generatedAt)} · ${report.mode === "demo" ? "Demonstração com dados fictícios" : "Análise técnica para revisão"}`],
       ]),
       p(report.summary), p(report.scope),
-      h("1.1. Pendências na Receita Federal"), t(["Referência", "Tributo / período", "Situação", "Total"], report.debts.filter(d => d.origin === "RFB").map(d => [d.id, `${d.tax} · ${d.period}`, d.status, money(d.total)])),
+      h("1.1. Pendências na Receita Federal"),
+      // Sem débito da Receita, a tabela vazia não diz nada: explica se a fonte foi consultada e onde estão os demais registros.
+      ...(rfbDebts.length ? [t(["Referência", "Tributo / período", "Situação", "Total"], rfbDebts.map(d => [d.id, `${d.tax} · ${d.period}`, d.status, money(d.total)]))]
+        : [p(rfbSource?.status === "coletado" ? `O relatório de situação fiscal da Receita Federal não apresenta débitos em cobrança.${report.supplements?.some(s => s.title.startsWith("SITFIS")) ? " Parcelamentos, omissões de declaração e demais registros do relatório estão transcritos em Evidências complementares, sem somar ao passivo." : ""}` : rfbSource?.status === "declarado" ? "Nenhum débito da Receita Federal discriminado; ver a leitura do analista abaixo." : "Receita Federal não consultada nesta versão: depende de procuração à FS ou da leitura do analista.")]),
       ...(declaration ? [call("Leitura da Receita Federal pelo analista", `${declaration.analyst} informou ${declaration.hasDebts ? `a existência de débitos na Receita Federal${declaration.count !== null ? ` (${declaration.count} débitos)` : ""}` : "que não há débitos em cobrança na Receita Federal"}. Fonte da leitura: ${declaration.reference}.${declaration.note ? ` ${declaration.note}` : ""} Leitura feita sem procuração, em documento do contribuinte; não substitui a Situação Fiscal coletada pelo sistema.`, declaration.hasDebts ? "red" : "gold")] : []),
       h("2. Composição do débito"), t(["Componente PGFN", "Valor", "% do total"], [...m.composition.map((v, i) => [compNames[i], money(v), percent(v !== null && debtTotal ? v / debtTotal * 100 : null)]), ["TOTAL CONSOLIDADO", money(debtTotal), debtTotal ? "100,00%" : "Não informado"]]),
       p("A base potencial de redução é composta pelos acréscimos elegíveis. O principal permanece preservado no cálculo. Componentes ausentes impedem a simulação da inscrição correspondente."),
