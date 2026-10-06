@@ -16,7 +16,7 @@ Implementado em 30/09/2026 e implantado na VPS em 01/10/2026 (agente no lugar da
 1. Renovar a assinatura da instância Z-API (em 30/09 respondia "subscribe to this instance again").
 2. No sistema (já no ar): administrador cadastra WhatsApp e atribuições em Configurações → Equipe.
 3. No `.env` do agente: `MAC_BRIDGE_TOKEN` (novo valor; copiar para `secrets/bridge.env` do Mac como `BRIDGE_TOKEN`), `ZAPI_WEBHOOK_TOKEN` igual ao `WEBHOOK_TOKEN` da ponte, `FS_SYSTEM_URL=https://app.fssolucoestributarias.com.br`. Manter `WHATSAPP_DRY_RUN=true` até o teste.
-4. `docker compose -f docker-compose.prod.yml -f docker-compose.cert.yml -f docker-compose.webhook.yml up -d --build api worker`.
+4. `docker compose -f docker-compose.prod.yml -f docker-compose.cert.yml -f docker-compose.webhook.yml -f docker-compose.sitfis.yml up -d --build api worker` (o `sitfis.yml` monta as chaves do Integra Contador de `secrets/serpro`; o certificado da FS é o mesmo do `cert.yml`).
 5. Parar a ponte (`docker stop fs-mac-bridge`) só depois de o agente responder em `https://api.fssolucoestributarias.com.br/zapi/<token>`; o pedido `inflight` antigo da ponte (16/09) não migra.
 6. No Mac: `secrets/bridge.env` com `BRIDGE_URL=http://127.0.0.1:3000` (túnel SSH para a VPS) e o novo token; reiniciar o conector.
 7. Teste com `WHATSAPP_DRY_RUN=true` (mensagens só no log), depois `false` com os números cadastrados.

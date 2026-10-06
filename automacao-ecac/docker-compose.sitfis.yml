@@ -1,0 +1,9 @@
+# Credenciais do contrato Integra Contador para a consulta SITFIS pedida pelo sistema FS (fila sistema-sitfis).
+# Usar junto de prod + cert + webhook: só acrescenta as chaves (somente leitura); o certificado da FS já vem do cert.yml.
+services:
+  worker:
+    environment:
+      SERPRO_CONSUMER_KEY_FILE: /run/secrets/serpro/consumer-key
+      SERPRO_CONSUMER_SECRET_FILE: /run/secrets/serpro/consumer-secret
+    volumes:
+      - ./secrets/serpro:/run/secrets/serpro:ro
