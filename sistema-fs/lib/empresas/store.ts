@@ -43,7 +43,7 @@ export async function updateCompany(cnpj: string, input: Pick<CompanyInput, "nam
   if (!current || !ownedBy(scope, current.ownerId)) throw new Error("NOT_FOUND");
   const at = new Date().toISOString();
   // Empresa só conhecida pelo Controller passa a ter cadastro próprio ao ser editada.
-  await query("INSERT INTO fs_companies (cnpj,name,notes,created_by,created_by_id,created_at,updated_at,owner_id) VALUES ($1,$2,$3,$4,$5,$6,$6,$7) ON CONFLICT(cnpj) DO UPDATE SET name=$2, notes=$3, updated_at=$6", [cnpj, input.name, input.notes, actor.name, actor.id, at, current.ownerId ?? ownerFor(actor)]);
+  await query("INSERT INTO fs_companies (cnpj,name,notes,created_by,created_by_id,created_at,updated_at,owner_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(cnpj) DO UPDATE SET name=excluded.name, notes=excluded.notes, updated_at=excluded.updated_at", [cnpj, input.name, input.notes, actor.name, actor.id, at, at, current.ownerId ?? ownerFor(actor)]);
   return (await listCompanies(scope)).find(c => c.cnpj === cnpj)!;
 }
 const scopeOf = (actor: Actor): Scope => actor.role === "externo" ? { ownerId: actor.id } : null;

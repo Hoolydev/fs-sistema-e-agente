@@ -1,6 +1,7 @@
 import { SystemDocumentClient } from "./system/documents.js";
 import { existsSync } from "node:fs";
 import { rm } from "node:fs/promises";
+import { join } from "node:path";
 import process from "node:process";
 import { Worker, UnrecoverableError } from "bullmq";
 import { loadConfig } from "./config.js";
@@ -24,6 +25,9 @@ import {
   type DocumentStore,
 } from "./storage/document-store.js";
 import { createWhatsAppGateway } from "./whatsapp/client.js";
+import { processSitfisJob, SITFIS_QUEUE, type SitfisJob } from "./sistema/sitfis.js";
+import { assertPdfTaxpayer } from "./serpro/automation.js";
+import { describePdf } from "./rpa/federal-debt-flow.js";
 
 if (existsSync(".env")) process.loadEnvFile(".env");
 
@@ -131,6 +135,23 @@ const worker = new Worker<RpaRequest, { status: string; storageKey?: string }>(
   },
 );
 
+// Situação Fiscal para o sistema FS: uma consulta por pedido, resultado entregue em /api/agent/sitfis.
+const sitfisWorker = config.SERPRO_ENABLED && config.FS_SYSTEM_URL && config.FS_SYSTEM_API_TOKEN ? new Worker<SitfisJob>(SITFIS_QUEUE, async (job) => {
+  if (job.data.started) throw new UnrecoverableError("Pedido SITFIS já iniciado; revisar antes de repetir.");
+  await job.updateData({ ...job.data, started: true });
+  const client = new SerproSitfisClient(config, certificateProvider);
+  const result = await processSitfisJob(job.data, {
+    obtainPdf: cnpj => { assertSerproConfiguration(config); return client.obtainSituationPdf(cnpj); },
+    extractText: async (path, cnpj) => { const source = await describePdf("situacao_fiscal_rfb", "Situação Fiscal RFB — SITFIS", path); assertPdfTaxpayer(source.text, cnpj); return source.text; },
+    post: body => fetch(`${config.FS_SYSTEM_URL.replace(/\/$/, "")}/api/agent/sitfis`, { method: "POST", headers: { authorization: `Bearer ${config.FS_SYSTEM_API_TOKEN}` }, body, signal: AbortSignal.timeout(60_000) }),
+    dataDir: join(config.LOCAL_DOCUMENT_DIR, "..", "sitfis"),
+    errorCode: error => error instanceof SerproError ? error.code : "processing_failed",
+  });
+  logger.info({ requestId: job.data.requestId, status: result.status, code: result.code }, "sitfis job finished");
+  return result;
+}, { connection: redisConnectionFromUrl(config.REDIS_URL), concurrency: 1, lockDuration: config.SERPRO_POLL_TIMEOUT_MS + 5 * 60_000 }) : undefined;
+sitfisWorker?.on("failed", (job, error) => logger.error({ requestId: job?.data.requestId, err: error }, "sitfis job failed"));
+
 worker.on("failed", (job, error) => {
   logger.error({ jobId: job?.id, err: error }, "rpa job failed");
 });
@@ -139,6 +160,7 @@ worker.on("error", (error) => logger.error({ err: error }, "worker error"));
 const shutdown = async (signal: string) => {
   logger.info({ signal }, "shutting down worker");
   await worker.close();
+  await sitfisWorker?.close();
   process.exit(0);
 };
 process.once("SIGINT", () => void shutdown("SIGINT"));

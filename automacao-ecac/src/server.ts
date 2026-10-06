@@ -13,6 +13,7 @@ import { SystemPlatform } from "./system/platform.js";
 import { RedisMacJobQueue } from "./mac/queue.js";
 import { startFallbackWatch } from "./mac/fallback.js";
 import { startNotificationPoller } from "./notifications/poller.js";
+import { BullMqSitfisPublisher } from "./sistema/sitfis.js";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -42,12 +43,14 @@ const macArchive = documents ? {
     } finally { await rm(folder, { recursive: true, force: true }).catch(() => {}); }
   },
 } : undefined;
-const app = await buildApp({ config, logger, orchestrator, ...(macQueue ? { mac: { queue: macQueue, whatsapp, ...(platform ? { platform } : {}), ...(macArchive ? { archive: macArchive } : {}) } } : {}) });
+// SITFIS só com o sistema configurado e o Integra Contador ativo neste agente.
+const sitfis = systemConfigured && config.SERPRO_ENABLED ? new BullMqSitfisPublisher(redisConnectionFromUrl(config.REDIS_URL)) : undefined;
+const app = await buildApp({ config, logger, orchestrator, ...(sitfis ? { sitfis } : {}), ...(macQueue ? { mac: { queue: macQueue, whatsapp, ...(platform ? { platform } : {}), ...(macArchive ? { archive: macArchive } : {}) } } : {}) });
 const stopPoller = platform ? startNotificationPoller(platform, whatsapp, logger, config.NOTIFICATIONS_POLL_MS) : undefined;
 const stopFallback = macQueue ? startFallbackWatch(config, macQueue, pendingRequests, whatsapp, logger) : undefined;
 
 app.addHook("onClose", async () => {
-  stopPoller?.(); stopFallback?.();
+  stopPoller?.(); stopFallback?.(); await sitfis?.close();
   await publisher.close();
   await stateRedis.quit();
 });

@@ -36,6 +36,8 @@ Referência de estrutura: `materiais-cliente/Parecer_SOSTributo_GPA_Construcoes.
 - **Anexos.** Documentos da empresa escolhidos na análise ficam listados no parecer (`annexes`, com SHA-256). `GET /api/documentos/:id/completo` gera na hora um PDF único com o parecer e os arquivos originais (imagens viram página); o que passar de 4 MB é listado numa página final.
 - **Complemento e correção sem nova cobrança.** Complementar uma análise dentro da janela de 24 h (leitura da Receita ou anexos) gera nova versão reaproveitando a evidência PGFN guardada. `reissuePreliminary` reemite um preliminar antigo pela regra atual, também sem nova consulta.
 
+- **Receita Federal com procuração (SITFIS).** Opção "Empresa com procuração para a FS" na análise: o agente da VPS consulta a Situação Fiscal e devolve o PDF; o sistema emite a versão completa (Receita + PGFN) pelo mesmo template, ou marca "revisão necessária" se o layout não for reconhecido. Ver `automacao-ecac/docs/AGENTE-EQUIPE-MAC-AVISOS.md`. O montador SITFIS aceita inscrições "ATIVA…" de qualquer variante e resposta PGFN "não encontrado"; situação desconhecida continua interrompendo a emissão.
+
 ## Limite atual
 
 O sistema apresenta o template e exporta o PDF demonstrativo. Consultas reais, preenchimento automático dos dados e revisão/assinatura técnica ainda dependem da integração e dos documentos do cliente. Não há coleta fiscal realizada por este ajuste.

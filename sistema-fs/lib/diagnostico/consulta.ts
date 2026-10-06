@@ -18,7 +18,7 @@ import { ownerClause, type Scope } from '@/lib/auth/scope';
 export type ConsultaResult = { id: string; reportUrl: string; pdfUrl: string; version: number; reused: boolean; rfbPending: boolean; pgfnReused?: boolean };
 
 const evidenceReady = new Map<string, Promise<void>>();
-async function setupEvidence() {
+export async function setupEvidence() {
   await setupDocuments();
   const key = process.env.FS_CRM_DATABASE_URL || process.env.DATABASE_URL || 'sqlite';
   if (!evidenceReady.has(key)) evidenceReady.set(key, query(`CREATE TABLE IF NOT EXISTS fs_diagnostic_evidence (id TEXT PRIMARY KEY, document_id TEXT NOT NULL REFERENCES fs_documents(id), source_id TEXT NOT NULL, cnpj TEXT NOT NULL, http_status INTEGER NOT NULL, sha256 TEXT NOT NULL, collected_at TEXT NOT NULL, content ${key === 'sqlite' ? 'BLOB' : 'BYTEA'} NOT NULL)`).then(() => undefined).catch(e => { evidenceReady.delete(key); throw e; }));
@@ -37,7 +37,7 @@ export async function latestAppReport(cnpj: string, scope: Scope = null) {
 }
 
 // Evidência PGFN já paga, preservada com o parecer: permite nova versão (leitura da Receita, anexos) sem nova consulta.
-async function storedPgfn(documentId: string): Promise<PgfnEvidence | null> {
+export async function storedPgfn(documentId: string): Promise<PgfnEvidence | null> {
   await setupEvidence();
   const [row] = await query("SELECT http_status, sha256, collected_at, content FROM fs_diagnostic_evidence WHERE document_id=$1 AND source_id='pgfn'", [documentId.slice(4)]);
   if (!row) return null;

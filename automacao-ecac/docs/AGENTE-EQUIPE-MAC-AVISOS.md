@@ -21,6 +21,12 @@ Implementado em 30/09/2026 e implantado na VPS em 01/10/2026 (agente no lugar da
 6. No Mac: `secrets/bridge.env` com `BRIDGE_URL=http://127.0.0.1:3000` (túnel SSH para a VPS) e o novo token; reiniciar o conector.
 7. Teste com `WHATSAPP_DRY_RUN=true` (mensagens só no log), depois `false` com os números cadastrados.
 
+## Situação Fiscal (SITFIS) pedida pelo sistema (06/10/2026)
+
+Empresa com procuração para a FS: no formulário "Analisar uma empresa", a opção "Empresa com procuração para a FS" faz o sistema emitir o preliminar (PGFN) e chamar `POST https://api.fssolucoestributarias.com.br/sistema/sitfis` (`Authorization: Bearer` = `FS_AGENT_SERVICE_TOKEN` do sistema = `FS_SYSTEM_API_TOKEN` do agente; corpo `{ requestId, cnpj }`). A rota enfileira na fila `sistema-sitfis` com `jobId = requestId` e sem novas tentativas (consulta cobrada). O worker consulta o Integra Contador com o certificado da FS, guarda cópia em `/app/data/sitfis/<requestId>/`, extrai o texto, confere o CNPJ e devolve em `POST {FS_SYSTEM_URL}/api/agent/sitfis` (multipart: `metadata`, `file`, `text`), com até 4 tentativas de entrega. Falha da Receita é devolvida com o código (`access_denied` = procuração ausente ou sem o serviço).
+
+No sistema (`lib/diagnostico/sitfis.ts`): o PDF oficial entra na documentação da empresa (`situacao_fiscal`) e o parecer completo (Receita + PGFN) é emitido como nova versão pelo montador `reportFromSerpro`, reaproveitando a PGFN já consultada. Relatório fora do layout homologado fica em "revisão necessária" (PDF guardado, sem números presumidos). A tela do parecer mostra o andamento e o link da versão completa; quem pediu recebe aviso no WhatsApp quando cadastrado.
+
 ## Rede na VPS
 
 O `api` entra na rede `coolify` para o Traefik alcançá-lo. Nessa rede, os nomes `redis` e `postgres` resolvem para os serviços do próprio Coolify (que exigem senha: erro `NOAUTH`). Por isso `docker-compose.webhook.yml` lê também `.env.api-rede`, gerado na VPS com `REDIS_URL` e `DATABASE_URL` apontando para `fs-automacao-ecac-redis-1` e `fs-automacao-ecac-postgres-1`. Regerar esse arquivo se a senha do Postgres mudar.

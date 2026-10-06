@@ -3,6 +3,7 @@ import { headers } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import Dashboard from '@/components/fs/dashboard';
 import { FiscalOpinion } from '@/components/diagnostico/fiscal-opinion';
+import { SitfisStatus } from '@/components/diagnostico/sitfis-status';
 import { getAuth } from '@/lib/auth/server';
 import { roleOf } from '@/lib/auth/roles';
 import { scopeFor } from '@/lib/auth/scope';
@@ -24,6 +25,7 @@ export default async function SavedDiagnosticPage({ params }: { params: Promise<
     <Link className="diag-text-button" href="/diagnostico">← Voltar ao acervo</Link>
     <div className="diag-heading diag-hero"><div><p className="diag-eyebrow">{rfbPending ? 'PARECER FS · PRELIMINAR · DOCUMENTO SALVO' : 'PARECER FS · DOCUMENTO SALVO'}</p><h1>{report.company.name}</h1><p>{formatCnpj(report.company.cnpj)} · Versão {report.version} · Data-base {new Date(report.generatedAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</p></div></div>
     <div className="diag-company-actions">{report.annexes?.length ? <a className="diag-button primary" href={`/api/documentos/${id}/completo?download=1`} target="_blank" rel="noopener noreferrer">Baixar parecer com {report.annexes.length} anexo{report.annexes.length === 1 ? '' : 's'}</a> : null}<a className={`diag-button${report.annexes?.length ? '' : ' primary'}`} href={`/api/documentos/${id}?download=1`} target="_blank" rel="noopener noreferrer">Baixar parecer FS em PDF</a><a className="diag-button" href={`/api/documentos/${id}`} target="_blank" rel="noopener noreferrer">Abrir PDF para imprimir</a></div>
+    <SitfisStatus documentId={id} />
     {rfbPending && <div className="diag-alert" role="status"><p><strong>Receita Federal pendente.</strong> {report.sources.find(s => s.id === 'rfb')?.note} Os totais abaixo consideram apenas a PGFN; ausência de dados da RFB não significa ausência de débitos.</p></div>}
     <div className="diag-kpis"><div className="diag-kpi debt-total"><div>{rfbPending ? 'Total em cobrança · RFB pendente' : 'Total em cobrança'}</div><strong>{money(totals.total)}</strong><small>Recorte das fontes na data-base</small></div><div className="diag-kpi"><div>Dívida ativa · PGFN</div><strong>{money(totals.pgfn)}</strong><small>{totals.count} inscrições incluídas</small></div><div className="diag-kpi"><div>Receita Federal</div><strong>{money(totals.rfb)}</strong><small>{rfbPending ? 'Aguardando procuração no e-CAC' : 'Valores a vencer apresentados separadamente'}</small></div></div>
     <section className="diag-card diag-reading-summary"><h2>Síntese do levantamento</h2><p>{report.summary}</p><p>Documento para revisão técnica. Reabrir e baixar este parecer reutiliza a versão arquivada, sem nova consulta fiscal.</p></section>

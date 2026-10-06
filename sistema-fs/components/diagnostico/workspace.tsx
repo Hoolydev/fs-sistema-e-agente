@@ -26,7 +26,7 @@ export default function DiagnosticWorkspace() {
       if (response.status === 401) { window.location.assign("/login"); return; }
       const data = await response.json();
       if (response.ok && typeof data.reportUrl === "string" && data.reportUrl.startsWith("/diagnostico/")) {
-        if (data.reused) { setReusedUrl(data.reportUrl); setError(data.message ?? "Já existe um diagnóstico recente deste CNPJ."); setLoading(false); return; }
+        if (data.reused && !data.sitfis) { setReusedUrl(data.reportUrl); setError(data.message ?? "Já existe um diagnóstico recente deste CNPJ."); setLoading(false); return; }
         window.location.assign(data.reportUrl); return;
       }
       setError(data.message ?? "A consulta não retornou um diagnóstico. Tente novamente mais tarde.");

@@ -8,6 +8,7 @@ import type { OrchestratorService } from "./orchestrator/service.js";
 import { extractInboundMessages, extractZApiInboundMessages } from "./whatsapp/payload.js";
 import { verifyMetaSignature } from "./whatsapp/signature.js";
 import { registerMacRoutes, type MacRouteDependencies } from "./mac/routes.js";
+import { bearerMatches, sitfisRequestSchema, type SitfisPublisher } from "./sistema/sitfis.js";
 
 const verificationQuery = z.object({
   "hub.mode": z.string(),
@@ -21,6 +22,7 @@ export interface AppDependencies {
   orchestrator: Pick<OrchestratorService, "handle">;
   readiness?: () => Promise<boolean>;
   mac?: Omit<MacRouteDependencies, "config" | "logger">;
+  sitfis?: SitfisPublisher;
 }
 
 export async function buildApp(dependencies: AppDependencies) {
@@ -36,6 +38,16 @@ export async function buildApp(dependencies: AppDependencies) {
   app.get("/health", async () => ({ status: "ok" }));
   // O logger pino concreto muda o tipo genérico da instância; as rotas do Mac só usam get/post/addHook.
   if (dependencies.mac) await registerMacRoutes(app as unknown as FastifyInstance, { config, logger, ...dependencies.mac });
+  // Pedido de Situação Fiscal vindo do sistema FS (mesmo token que o agente usa para falar com o sistema).
+  app.post("/sistema/sitfis", { logLevel: "warn" }, async (request, reply) => {
+    if (!bearerMatches(headerValue(request.headers.authorization), config.FS_SYSTEM_API_TOKEN)) return reply.code(401).send({ error: "unauthorized" });
+    if (!dependencies.sitfis) return reply.code(503).send({ error: "sitfis_not_configured" });
+    const parsed = sitfisRequestSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "invalid_request" });
+    await dependencies.sitfis.publish(parsed.data);
+    logger.info({ requestId: parsed.data.requestId }, "sitfis request queued");
+    return reply.code(202).send({ accepted: true, requestId: parsed.data.requestId });
+  });
   app.get("/ready", async (_request, reply) => {
     const ready = (await dependencies.readiness?.()) ?? true;
     return reply.code(ready ? 200 : 503).send({ status: ready ? "ready" : "not_ready" });

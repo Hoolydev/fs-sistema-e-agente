@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { isValidCnpj, normalizeCnpj } from "@/lib/diagnostico/model";
 import { PgfnError } from "@/lib/diagnostico/pgfn";
 import { runPreliminaryDiagnostic } from "@/lib/diagnostico/consulta";
+import { requestSitfis } from "@/lib/diagnostico/sitfis";
 import { z } from "zod";
 
 // Leitura da Receita Federal sem procuração, feita pelo analista. Valores em centavos; o nome do analista vem da sessão.
@@ -15,7 +16,8 @@ const rfbManualSchema = z.object({
   count: z.number().int().min(0).max(9999).nullable().optional(), totalCents: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER).nullable().optional(),
   items: z.array(z.object({ description: text(2, 120), period: text(0, 40), total: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER) })).max(50).optional(),
 }).strict();
-const extrasSchema = z.object({ rfbManual: rfbManualSchema.nullable().optional(), annexIds: z.array(z.string().max(90)).max(30).optional() });
+// rfbSitfis: a empresa outorgou procuração à FS; após o preliminar, o agente consulta a Situação Fiscal na Receita.
+const extrasSchema = z.object({ rfbManual: rfbManualSchema.nullable().optional(), annexIds: z.array(z.string().max(90)).max(30).optional(), rfbSitfis: z.boolean().optional() });
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -37,10 +39,13 @@ export async function POST(request: Request) {
   const rfbManual = extras.data.rfbManual ? { ...extras.data.rfbManual, analyst: session.user.name } : null;
   try {
     // Externo só reaproveita e arquiva pareceres próprios.
-    const result = await runPreliminaryDiagnostic(normalizeCnpj(raw), session.user.id, { force, scope: scopeFor({ id: session.user.id, role: roleOf(session.user) }), rfbManual, annexIds: extras.data.annexIds ?? [] });
-    const message = result.reused ? "Já existe um diagnóstico recente deste CNPJ. Reabrindo o parecer arquivado, sem nova consulta."
-      : `${result.pgfnReused ? "Nova versão emitida com a consulta PGFN já realizada (sem nova cobrança)" : "Diagnóstico preliminar emitido: PGFN e cadastro coletados"}; ${rfbManual ? "Receita Federal pela leitura do analista" : "Receita Federal pendente de procuração"}.`;
-    return NextResponse.json({ ...result, message }, { status: result.reused ? 200 : 201, headers });
+    const result = await runPreliminaryDiagnostic(normalizeCnpj(raw), session.user.id, { force, scope: scopeFor({ id: session.user.id, role: roleOf(session.user) }), rfbManual: extras.data.rfbSitfis ? null : rfbManual, annexIds: extras.data.annexIds ?? [] });
+    const scope = scopeFor({ id: session.user.id, role: roleOf(session.user) });
+    const sitfis = extras.data.rfbSitfis ? await requestSitfis({ baseDocumentId: result.id, cnpj: normalizeCnpj(raw), actor: { id: session.user.id, name: session.user.name }, ownerId: scope?.ownerId ?? null }).catch(() => null) : null;
+    const rfbText = sitfis ? (sitfis.status === "solicitado" ? "consulta da Receita Federal solicitada ao agente; a versão completa aparece no acervo em alguns minutos" : sitfis.status === "concluido" ? "Receita Federal já consultada para este parecer" : sitfis.message) : rfbManual ? "Receita Federal pela leitura do analista" : "Receita Federal pendente de procuração";
+    const message = result.reused && !sitfis ? "Já existe um diagnóstico recente deste CNPJ. Reabrindo o parecer arquivado, sem nova consulta."
+      : `${result.reused ? "Parecer recente reaproveitado, sem nova consulta PGFN" : result.pgfnReused ? "Nova versão emitida com a consulta PGFN já realizada (sem nova cobrança)" : "Diagnóstico preliminar emitido: PGFN e cadastro coletados"}; ${rfbText}.`;
+    return NextResponse.json({ ...result, message, sitfis: sitfis && { status: sitfis.status, message: sitfis.message } }, { status: result.reused ? 200 : 201, headers });
   } catch (error) {
     if (error instanceof PgfnError) {
       if (error.code === "credentials_missing") return NextResponse.json({ code: "PROVIDER_NOT_READY", message: "As credenciais do contrato Serpro Dívida Ativa não estão configuradas no sistema. Nenhuma consulta foi realizada ou cobrada." }, { status: 503, headers });
