@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import { PDFDocument } from 'pdf-lib';
 Object.assign(process.env, { NODE_ENV: 'test' }); delete process.env.DATABASE_URL; delete process.env.FS_CRM_DATABASE_URL; process.env.FS_CRM_LOCAL_DIR = mkdtempSync(join(tmpdir(), 'fs-sitfis-test-'));
 import { runPreliminaryDiagnostic } from '../lib/diagnostico/consulta';
-import { completeSitfis, requestSitfis, sitfisStatusFor } from '../lib/diagnostico/sitfis';
+import { completeSitfis, reprocessSitfis, requestSitfis, sitfisStatusFor } from '../lib/diagnostico/sitfis';
+import { query } from '../lib/comercial/store';
 import { savedReport } from '../lib/diagnostico/store';
 import { documents } from '../lib/documentos/store';
 import { summarize } from '../lib/diagnostico/model';
@@ -23,10 +24,12 @@ TRIM/2026 30/04/2026 150,00 100,00 20,00 5,00 125,00 DEVEDOR
 Débito com Exigibilidade Suspensa (SIEF) __________
 Receita PA/Exerc. Dt. Vcto
 0561-07 - IRRF 08/2026 18/09/2026 60,00 50,00 A ANALISAR-A VENCER
-Diagnóstico Fiscal na Procuradoria-Geral
+__________ Diagnóstico Fiscal na Procuradoria-Geral da Fazenda Nacional __________
 Pendência - Inscrição (SIDA) __________
 20.2.26.000001-00 3551-IRPJ 20/07/2026 11111.111.111/2026-11 DEVEDOR PRINCIPAL
-Situação: ATIVA EM COBRANCA`;
+Situação: ATIVA EM COBRANCA
+__________
+Final do Relatório`;
 const pgfnRow = { cpfCnpj: cnpj, numeroInscricao: '2022600000100', valorTotalConsolidadoMoeda: '1.250,00', situacaoDescricao: 'ATIVA AJUIZADA NEGOCIADA NO SISPAR', numeroProcesso: '11111111111202611', dataInscricao: '20/07/2026' };
 const env = { NODE_ENV: 'test', SERPRO_DIVIDA_CONSUMER_KEY: 'k', SERPRO_DIVIDA_CONSUMER_SECRET: 's', FS_AGENT_SERVICE_TOKEN: 'tok', FS_AGENT_URL: 'https://agente.test' } as NodeJS.ProcessEnv;
 const serpro = (async (url: string) => url.endsWith('/token') ? new Response(JSON.stringify({ access_token: 't' }), { status: 200 }) : url.includes('/devedor/') ? new Response(JSON.stringify([pgfnRow]), { status: 200 }) : new Response('{}', { status: 404 })) as unknown as typeof fetch;
@@ -39,8 +42,8 @@ test('mapeador SITFIS: inscrição negociada no SISPAR entra no passivo e situa�
   assert.equal(report.debts[1].judicialProcess, 'Ajuizada (número do juízo não informado na fonte)');
   assert.ok(report.supplements?.some(s => s.title === 'PGFN - inscrições ativas por situação'));
   assert.throws(() => reportFromSerpro({ cnpj, rfbText: text, pgfn: [{ ...pgfnRow, situacaoDescricao: 'DESCONHECIDA' }], collectedAt: '2026-10-06T12:00:00.000Z', rfbHash: 'a', pgfnHash: 'b', reportId: 'X', version: 2 }), /STATUS/);
-  assert.throws(() => reportFromSerpro({ cnpj, rfbText: text.replace(/Pendência - Inscrição[\s\S]*/, 'Pendência - Inscrição (SIDA) ____'), pgfn: [], collectedAt: '2026-10-06T12:00:00.000Z', rfbHash: 'a', pgfnHash: 'b', reportId: 'X', version: 2 }), /PGFN_EMPTY/);
-  assert.equal(reportFromSerpro({ cnpj, rfbText: text.replace(/Pendência - Inscrição[\s\S]*/, 'Pendência - Inscrição (SIDA) ____'), pgfn: [], pgfnNotFound: true, collectedAt: '2026-10-06T12:00:00.000Z', rfbHash: 'a', pgfnHash: 'b', reportId: 'X', version: 2 }).debts.length, 1);
+  assert.throws(() => reportFromSerpro({ cnpj, rfbText: text.replace(/Pendência - Inscrição[\s\S]*/, 'Pendência - Inscrição (SIDA) ____\n____\nFinal do Relatório'), pgfn: [], collectedAt: '2026-10-06T12:00:00.000Z', rfbHash: 'a', pgfnHash: 'b', reportId: 'X', version: 2 }), /PGFN_EMPTY/);
+  assert.equal(reportFromSerpro({ cnpj, rfbText: text.replace(/Pendência - Inscrição[\s\S]*/, 'Pendência - Inscrição (SIDA) ____\n____\nFinal do Relatório'), pgfn: [], pgfnNotFound: true, collectedAt: '2026-10-06T12:00:00.000Z', rfbHash: 'a', pgfnHash: 'b', reportId: 'X', version: 2 }).debts.length, 1);
 });
 test('pedido ao agente: um por parecer, falha de rede ou recusa registradas sem consulta', async () => {
   const base = await runPreliminaryDiagnostic(cnpj, 'u1', { env, fetchImpl: serpro });
@@ -76,6 +79,11 @@ test('relatório fora do layout vai para revisão com o PDF guardado; recusa da 
   const req = await requestSitfis({ baseDocumentId: base.id, cnpj, actor, ownerId: null, force: true }, env, ok202);
   const review = await completeSitfis({ requestId: req.id, cnpj, ok: true, pdf: await pdfOf(), text: 'Dados Cadastrais da Matriz __\nCNPJ: 12.345.678/0001-95\nCNPJ: 12.345.678 - EMPRESA\nLAYOUT NOVO' });
   assert.equal(review.status, 'revisao'); assert.ok(review.sitfisDocumentId); assert.equal(review.resultDocumentId, null); assert.match(review.message, /leitura manual/);
+  // Depois do ajuste no leitor, a releitura usa o PDF e o texto guardados, sem nova consulta.
+  await query('UPDATE fs_sitfis_requests SET source_text=$1 WHERE id=$2', [text, req.id]);
+  const redone = await reprocessSitfis(req.id);
+  assert.equal(redone.status, 'concluido'); assert.ok(redone.resultDocumentId); assert.equal(redone.sitfisDocumentId, review.sitfisDocumentId);
+  await assert.rejects(reprocessSitfis(req.id), /NOT_REPROCESSABLE/);
   const req2 = await requestSitfis({ baseDocumentId: base.id, cnpj, actor, ownerId: null, force: true }, env, ok202);
   const denied = await completeSitfis({ requestId: req2.id, cnpj, ok: false, code: 'access_denied' });
   assert.equal(denied.status, 'falhou'); assert.match(denied.message, /procuração eletrônica/);

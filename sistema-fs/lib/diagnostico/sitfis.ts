@@ -20,7 +20,12 @@ export const DEFAULT_AGENT_URL = 'https://api.fssolucoestributarias.com.br';
 let ready: Promise<void> | undefined;
 export async function setupSitfis() {
   await setupDocuments();
-  if (!ready) ready = query("CREATE TABLE IF NOT EXISTS fs_sitfis_requests (id TEXT PRIMARY KEY, cnpj TEXT NOT NULL, base_document_id TEXT NOT NULL, owner_id TEXT, requested_by TEXT NOT NULL, requested_by_name TEXT NOT NULL, status TEXT NOT NULL, message TEXT NOT NULL, result_document_id TEXT, sitfis_document_id TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)").then(() => undefined).catch(e => { ready = undefined; throw e; });
+  if (!ready) ready = (async () => {
+    await query("CREATE TABLE IF NOT EXISTS fs_sitfis_requests (id TEXT PRIMARY KEY, cnpj TEXT NOT NULL, base_document_id TEXT NOT NULL, owner_id TEXT, requested_by TEXT NOT NULL, requested_by_name TEXT NOT NULL, status TEXT NOT NULL, message TEXT NOT NULL, result_document_id TEXT, sitfis_document_id TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)");
+    // Texto extraído do PDF da Receita: permite reprocessar a leitura depois de ajuste no leitor, sem nova consulta cobrada.
+    if (process.env.FS_CRM_DATABASE_URL || process.env.DATABASE_URL) await query('ALTER TABLE fs_sitfis_requests ADD COLUMN IF NOT EXISTS source_text TEXT');
+    else await query('ALTER TABLE fs_sitfis_requests ADD COLUMN source_text TEXT').catch(() => {});
+  })().catch(e => { ready = undefined; throw e; });
   await ready;
 }
 const toRequest = (r: Record<string, unknown>): SitfisRequest => ({ id: String(r.id), cnpj: String(r.cnpj), baseDocumentId: String(r.base_document_id), status: r.status as SitfisStatus, message: String(r.message), resultDocumentId: r.result_document_id ? String(r.result_document_id) : null, sitfisDocumentId: r.sitfis_document_id ? String(r.sitfis_document_id) : null, createdAt: String(r.created_at), updatedAt: String(r.updated_at) });
@@ -78,6 +83,7 @@ export async function completeSitfis(input: { requestId: string; cnpj: string; o
   const [base] = await query('SELECT company, payload FROM fs_documents d JOIN fs_diagnostic_reports r ON r.document_id=d.id WHERE d.id=$1', [request.baseDocumentId.slice(4)]);
   const previous = base ? JSON.parse(String(base.payload)) as DiagnosticReport : null;
   // O PDF oficial da Receita fica sempre na documentação da empresa, mesmo que o parecer precise de revisão.
+  await query('UPDATE fs_sitfis_requests SET source_text=$1 WHERE id=$2', [input.text, request.id]);
   const sitfisDocumentId = await archiveDocument({ externalId: `sitfis-${request.id}`, cnpj: request.cnpj, company: previous?.company.name ?? `CNPJ ${request.cnpj}`, name: `Situacao Fiscal RFB ${request.cnpj} ${collectedAt.slice(0, 10)}.pdf`, kind: 'documento', createdAt: collectedAt, mime: 'application/pdf', source: 'Receita Federal / Serpro Integra Contador', docType: 'situacao_fiscal', ownerId }, pdf);
   const pgfn = await storedPgfn(request.baseDocumentId);
   try {
@@ -100,4 +106,15 @@ export async function completeSitfis(input: { requestId: string; cnpj: string; o
     await notify('Situação Fiscal da Receita recebida, mas precisa de leitura manual na tela de análise');
   }
   return (await sitfisStatusFor(request.baseDocumentId, null))!;
+}
+// Releitura de um relatório já recebido (status revisao): usa o PDF arquivado e o texto guardado. Não consulta a Receita de novo.
+export async function reprocessSitfis(requestId: string) {
+  await setupSitfis();
+  const [row] = await query('SELECT * FROM fs_sitfis_requests WHERE id=$1', [requestId]);
+  if (!row) throw new Error('NOT_FOUND');
+  if (row.status !== 'revisao' || !row.sitfis_document_id || !row.source_text) throw new Error('NOT_REPROCESSABLE');
+  const [doc] = await query('SELECT content, created_at FROM fs_documents WHERE id=$1', [String(row.sitfis_document_id).slice(4)]);
+  if (!doc) throw new Error('SITFIS_PDF_MISSING');
+  await query("UPDATE fs_sitfis_requests SET status='solicitado', updated_at=$1 WHERE id=$2 AND status='revisao'", [new Date().toISOString(), requestId]);
+  return completeSitfis({ requestId, cnpj: String(row.cnpj), ok: true, pdf: Buffer.from(doc.content as Uint8Array), text: String(row.source_text), collectedAt: String(doc.created_at) });
 }
