@@ -1,4 +1,4 @@
-import { formatCnpj, money, summarize, validateReport, type DiagnosticReport } from "./model";
+import { formatCnpj, money, pgfnSituation, summarize, validateReport, type DiagnosticReport } from "./model";
 
 export const percent = (v: number | null) => v === null ? "Não informado" : `${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
 export const shortDate = (v: string | null) => v ? new Date(v.length === 10 ? `${v}T12:00:00Z` : v).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "Não informada";
@@ -8,6 +8,33 @@ export function installments(total: number, count: number) {
   if (!Number.isSafeInteger(total) || total < 0 || !Number.isInteger(count) || count < 1) throw new Error("Parcelamento inválido");
   const regular = Math.floor(total / count);
   return { total, count, regular, last: total - regular * (count - 1) };
+}
+// Índice de saúde fiscal (0-100): indicador interno FS, calculado só com os dados do parecer. Não é CAPAG nem rating da PGFN.
+// Fator sem dado fica "não avaliado" (pontos null) e o índice é marcado como parcial; fonte ausente nunca vale como "sem débitos".
+export type HealthFactor = { label: string; reading: string; points: number | null; max: number };
+export type HealthBand = { label: string; tone: "green" | "gold" | "orange" | "red" };
+export const healthBand = (score: number): HealthBand => score >= 80 ? { label: "Saudável", tone: "green" } : score >= 60 ? { label: "Atenção", tone: "gold" } : score >= 40 ? { label: "Risco elevado", tone: "orange" } : { label: "Crítico", tone: "red" };
+const band = (count: number, steps: [number, number][], fallback: number) => steps.find(([limit]) => count <= limit)?.[1] ?? fallback;
+export function fiscalHealth(report: DiagnosticReport) {
+  const status = (id: string) => report.sources.find(s => s.id === id)?.status ?? "pendente";
+  const pgfnKnown = status("pgfn") !== "pendente", rfbKnown = status("rfb") !== "pendente", declaration = report.rfbDeclaration;
+  const pgfn = report.debts.filter(d => d.origin === "PGFN"), rfbDebts = report.debts.filter(d => d.origin === "RFB");
+  const rfbPresence = rfbKnown ? rfbDebts.length > 0 : declaration ? declaration.hasDebts : null;
+  const rfbCount = rfbKnown ? rfbDebts.length : declaration ? (declaration.hasDebts ? declaration.count : 0) : null;
+  const judicial = pgfn.filter(d => d.judicialProcess).length;
+  // Negociada/parcelada, suspensa ou garantida pesa menos que "em cobrança", mas nunca vale como ausência de dívida.
+  const inCollection = pgfn.filter(d => pgfnSituation(d.status) === "cobranca").length, managed = pgfn.length - inCollection;
+  const sourcePoints = (id: string, full: number) => ({ coletado: full, declarado: Math.floor(full / 2), demonstrativo: 0, pendente: 0 })[status(id)];
+  const factors: HealthFactor[] = [
+    { label: "Dívida ativa (PGFN)", max: 30, points: !pgfnKnown ? null : !pgfn.length ? 30 : !inCollection ? 15 : band(inCollection, [[2, 20], [5, 12], [10, 6]], 0), reading: !pgfnKnown ? "Fonte PGFN pendente" : !pgfn.length ? "Nenhuma inscrição ativa" : `${pgfn.length} inscrições ativas${managed ? ` · ${inCollection} em cobrança, ${managed} negociadas/suspensas/garantidas` : " em cobrança"}` },
+    { label: "Débitos na Receita Federal", max: 25, points: rfbPresence === null ? null : rfbPresence === false ? 25 : rfbCount === null ? 8 : band(rfbCount, [[0, 25], [3, 15], [10, 8]], 0), reading: rfbPresence === null ? "Não avaliado: Situação Fiscal pendente de procuração" : `${!rfbPresence ? "Sem débitos em cobrança" : rfbCount === null ? "Débitos informados, quantidade não informada" : `${rfbCount} débitos em cobrança`}${declaration && status("rfb") !== "coletado" && status("rfb") !== "demonstrativo" ? " (leitura do analista)" : ""}` },
+    { label: "Cobrança judicial", max: 20, points: pgfnKnown ? (judicial === 0 ? 20 : judicial / pgfn.length <= .25 ? 12 : judicial / pgfn.length <= .5 ? 6 : 0) : null, reading: pgfnKnown ? (judicial ? `${judicial} de ${pgfn.length} inscrições com referência judicial` : "Sem referência judicial informada pela PGFN") : "Fonte PGFN pendente" },
+    { label: "Possibilidade de certidão", max: 15, points: (pgfnKnown && inCollection > 0) || rfbPresence === true ? 0 : pgfnKnown && rfbPresence === false ? (managed ? 8 : 15) : null, reading: (pgfnKnown && inCollection > 0) || rfbPresence === true ? "Há débitos em cobrança: certidão negativa depende de regularização" : pgfnKnown && rfbPresence === false ? (managed ? "Só inscrições negociadas/suspensas/garantidas: certidão positiva com efeito de negativa depende da regularidade delas" : "Sem débitos em cobrança nas fontes") : managed ? "Inscrições PGFN negociadas/suspensas; avaliação depende da Receita Federal" : "Não avaliado sem a Receita Federal" },
+    { label: "Qualidade das fontes", max: 10, points: sourcePoints("pgfn", 5) + sourcePoints("rfb", 5), reading: [["PGFN", status("pgfn")], ["Receita Federal", status("rfb")]].map(([name, s]) => `${name}: ${s === "declarado" ? "leitura do analista" : s}`).join(" · ") },
+  ];
+  const evaluated = factors.filter(f => f.points !== null), max = evaluated.reduce((sum, f) => sum + f.max, 0), earned = evaluated.reduce((sum, f) => sum + f.points!, 0);
+  const score = max ? Math.round(earned / max * 100) : null;
+  return { score, band: score === null ? null : healthBand(score), partial: max < 100, evaluatedMax: max, factors, rfbPresence, rfbCount };
 }
 export function opinionMetrics(report: DiagnosticReport) {
   const totals = summarize(report), debts = report.debts.filter(d => d.origin === "PGFN"), config = report.opinion?.scenario;
@@ -26,14 +53,14 @@ export function opinionMetrics(report: DiagnosticReport) {
   const balance = config && final !== null && entryTotal !== null ? installments(final - entryTotal, config.balanceMonths) : null;
   const conventional = config && totals.pgfn !== null ? installments(totals.pgfn, config.conventionalMonths) : null;
   const annual = report.opinion?.annualRevenue ?? null, monthlyRevenue = annual === null ? null : Math.round(annual / 12);
-  return { totals, debts, composition, simulation, discount, final, entry, balance, conventional, monthlyRevenue, savingPercent: totals.pgfn && discount !== null ? discount / totals.pgfn * 100 : null, relief: conventional?.regular && entry ? (1 - entry.regular / conventional.regular) * 100 : null };
+  return { totals, debts, composition, simulation, discount, final, entry, balance, conventional, monthlyRevenue, health: fiscalHealth(report), savingPercent: totals.pgfn && discount !== null ? discount / totals.pgfn * 100 : null, relief: conventional?.regular && entry ? (1 - entry.regular / conventional.regular) * 100 : null };
 }
 export type OpinionBlock =
  | { type: "heading"; text: string }
  | { type: "text"; text: string }
  | { type: "callout"; title: string; text: string; tone: "gold" | "red" | "green" }
  | { type: "table"; headers: string[]; rows: string[][] }
- | { type: "kpis"; items: { label: string; value: string; detail?: string }[] }
+ | { type: "kpis"; items: { label: string; value: string; detail?: string; tone?: "navy" | "gold" | "green" | "orange" | "red" }[] }
  | { type: "charts" };
 export type OpinionPage = { title: string; subtitle: string; blocks: OpinionBlock[] };
 const h = (text: string): OpinionBlock => ({ type: "heading", text });
@@ -58,16 +85,37 @@ export function buildOpinion(input: DiagnosticReport) {
     ["Entrada sobre saldo original", s ? `Meses 1 a ${s.entryMonths}` : "Não definido", installmentText(m.entry)],
     ["Saldo após desconto e entrada", s ? `Meses ${s.entryMonths + 1} a ${s.entryMonths + s.balanceMonths}` : "Não definido", installmentText(m.balance)],
   ];
+  const hl = m.health, declaration = report.rfbDeclaration, rfbDebtCount = report.debts.filter(d => d.origin === "RFB").length;
+  const managedPgfn = m.debts.filter(d => pgfnSituation(d.status) !== "cobranca");
+  const pgfnDetail = !managedPgfn.length ? `${m.totals.count} inscrições ativas` : managedPgfn.length === m.totals.count ? `${m.totals.count} inscrições · todas negociadas/suspensas` : `${m.totals.count} inscrições · ${managedPgfn.length} negociadas/suspensas`;
+  const healthValue = hl.score === null ? "Não avaliado" : `${hl.score}/100`, healthDetail = hl.band ? `${hl.band.label}${hl.partial ? " · parcial" : ""}` : "Fontes insuficientes";
+  const rfbValue = m.totals.rfb !== null ? money(m.totals.rfb) : hl.rfbPresence ? "Há débitos" : "Pendente";
+  const rfbDetail = m.totals.rfb !== null ? `${rfbDebtCount} débitos em cobrança${report.sources.find(x => x.id === "rfb")?.status === "declarado" ? " · leitura do analista" : ""}` : declaration?.hasDebts ? `${declaration.count === null ? "Quantidade" : `${declaration.count} débitos ·`} valor não informado` : "Aguardando procuração no e-CAC";
+  // Sem cenário de transação simulado, o topo mostra o passivo apurado e o índice de saúde fiscal em vez de campos de desconto vazios.
+  const openingKpis: Extract<OpinionBlock, { type: "kpis" }>["items"] = s
+    ? [{ label: "PASSIVO INSCRITO · PGFN", value: money(debtTotal) }, { label: "DESCONTO-ALVO", value: percent(m.savingPercent), detail: s.targetRating, tone: "gold" }, { label: "ECONOMIA POTENCIAL", value: money(m.discount), tone: "green" }, { label: "VALOR A PAGAR · PGFN", value: money(m.final) }]
+    : [{ label: "PASSIVO FEDERAL · RFB + PGFN", value: m.totals.total === null ? "A apurar" : money(m.totals.total), detail: m.totals.total === null ? "Receita Federal sem valor apurado" : "Passivo federal identificado", tone: "red" },
+       { label: "DÍVIDA ATIVA · PGFN", value: money(debtTotal), detail: pgfnDetail },
+       { label: "RECEITA FEDERAL", value: rfbValue, detail: rfbDetail },
+       { label: "SAÚDE FISCAL", value: healthValue, detail: healthDetail, tone: hl.band?.tone ?? "navy" }];
+  const healthBlocks: OpinionBlock[] = [
+    h("Índice de saúde fiscal - como foi calculado"),
+    t(["Fator", "Leitura nas fontes", "Pontos"], [...hl.factors.map(f => [f.label, f.reading, f.points === null ? `Não avaliado (${f.max})` : `${f.points} de ${f.max}`]), ["ÍNDICE", hl.band ? `${hl.band.label}${hl.partial ? ` · parcial: ${hl.evaluatedMax} de 100 pontos avaliados` : ""}` : "Fontes insuficientes", healthValue]]),
+    p("Indicador interno da FS para priorizar o atendimento. Não é a CAPAG nem rating oficial da PGFN e não considera faturamento, garantias ou parcelamentos em curso. Fator sem fonte não é pontuado como regular."),
+  ];
   const pages: OpinionPage[] = [
     { title: "PARECER DE TRANSAÇÃO TRIBUTÁRIA", subtitle: "Desconto por inscrição · Desembolso · CAPAG · Certidão e garantias", blocks: [
       p(`${report.company.name} · CNPJ ${formatCnpj(report.company.cnpj)} · Base ${shortDate(report.generatedAt)}`),
-      { type: "kpis", items: [ { label: "PASSIVO INSCRITO · PGFN", value: money(debtTotal) }, { label: "DESCONTO-ALVO", value: percent(m.savingPercent), detail: s?.targetRating ?? "A confirmar" }, { label: "ECONOMIA POTENCIAL", value: money(m.discount) }, { label: "VALOR A PAGAR · PGFN", value: money(m.final) } ] },
+      { type: "kpis", items: openingKpis },
       { type: "charts" },
+      // Com cenário, o desembolso vem logo após os gráficos e o detalhamento do índice fica no fim da abertura.
+      ...(s ? [] : healthBlocks),
       h("Quadro de desembolso - o que sai do caixa"),
-      { type: "kpis", items: [{ label: "CONVENCIONAL / MÊS", value: money(m.conventional?.regular ?? null) }, { label: "ENTRADA / MÊS", value: money(m.entry?.regular ?? null) }, { label: "SALDO / MÊS", value: money(m.balance?.regular ?? null) }, { label: "ALÍVIO NA ENTRADA", value: percent(m.relief) }] },
-      t(["Etapa", "Período", "Valor nominal"], scheduleRows),
-      call("Premissas do cenário", s?.evidence ?? "Aguardando parâmetros de uma modalidade com evidência documental. Sem simulação de desconto ou prazo."),
+      // Sem cenário, a tabela seria toda "Não simulado": o quadro é substituído por uma nota até haver modalidade documentada.
+      ...(s ? [{ type: "kpis" as const, items: [{ label: "CONVENCIONAL / MÊS", value: money(m.conventional?.regular ?? null) }, { label: "ENTRADA / MÊS", value: money(m.entry?.regular ?? null), tone: "gold" as const }, { label: "SALDO / MÊS", value: money(m.balance?.regular ?? null), tone: "green" as const }, { label: "ALÍVIO NA ENTRADA", value: percent(m.relief) }] }, t(["Etapa", "Período", "Valor nominal"], scheduleRows), call("Premissas do cenário", s.evidence)]
+        : [call("Simulação de transação não realizada", "Comparador convencional, entrada e saldo dependem de modalidade, prazos e componentes do débito documentados. O quadro será preenchido quando esses parâmetros forem definidos; não há desconto ou prazo presumido neste parecer.")]),
       p(`Receita Federal: ${money(m.totals.rfb)}, separada desta simulação. Passivo federal identificado: ${money(m.totals.total)}. Valores nominais; eventual atualização não incluída.`),
+      ...(s ? healthBlocks : []),
     ] },
     { title: "DESEMBOLSO E PONTOS DE ATENÇÃO", subtitle: "Conciliação das parcelas · Janela de adesão · Rescisão · Execução fiscal", blocks: [
       h("Conferência do quadro de desembolso"),
@@ -91,6 +139,7 @@ export function buildOpinion(input: DiagnosticReport) {
       ]),
       p(report.summary), p(report.scope),
       h("1.1. Pendências na Receita Federal"), t(["Referência", "Tributo / período", "Situação", "Total"], report.debts.filter(d => d.origin === "RFB").map(d => [d.id, `${d.tax} · ${d.period}`, d.status, money(d.total)])),
+      ...(declaration ? [call("Leitura da Receita Federal pelo analista", `${declaration.analyst} informou ${declaration.hasDebts ? `a existência de débitos na Receita Federal${declaration.count !== null ? ` (${declaration.count} débitos)` : ""}` : "que não há débitos em cobrança na Receita Federal"}. Fonte da leitura: ${declaration.reference}.${declaration.note ? ` ${declaration.note}` : ""} Leitura feita sem procuração, em documento do contribuinte; não substitui a Situação Fiscal coletada pelo sistema.`, declaration.hasDebts ? "red" : "gold")] : []),
       h("2. Composição do débito"), t(["Componente PGFN", "Valor", "% do total"], [...m.composition.map((v, i) => [compNames[i], money(v), percent(v !== null && debtTotal ? v / debtTotal * 100 : null)]), ["TOTAL CONSOLIDADO", money(debtTotal), debtTotal ? "100,00%" : "Não informado"]]),
       p("A base potencial de redução é composta pelos acréscimos elegíveis. O principal permanece preservado no cálculo. Componentes ausentes impedem a simulação da inscrição correspondente."),
       h("3. Composição por natureza, tributo e período"),
@@ -165,6 +214,7 @@ export function buildOpinion(input: DiagnosticReport) {
     { title: "PARTE IV - CONCLUSÃO", subtitle: "Síntese técnica, evidências e emissão", blocks: [
       h("17. Conclusão"), p(o?.conclusion ?? report.conclusion),
       h("Fontes e rastreabilidade"), ...report.sources.map(source => p(`${source.id.toUpperCase()} · ${source.title}\n${source.provider} · ${source.status} · ${source.status === "pendente" ? "Coleta pendente" : shortDate(source.collectedAt)}. ${source.note}`)),
+      ...(report.annexes?.length ? [h("Anexos deste parecer"), t(["Documento", "Tipo", "Data", "SHA-256"], report.annexes.map(a => [a.name, a.type, shortDate(a.createdAt), `${a.sha256.slice(0, 16)}…`])), p("Os anexos são os arquivos originais do acervo da empresa, sem alteração. A versão \"parecer com anexos\" reúne este documento e os arquivos acima.")] : []),
       h("Documentos pendentes para emissão definitiva"), ...report.pending.map(v => p(`- ${v}`)),
       call("Responsabilidade pela emissão", report.mode === "demo" ? "Versão demonstrativa para validar o padrão visual e os cálculos. Nenhuma consulta real foi realizada. Não há assinatura ou parecer profissional emitido nesta versão." : "Documento preparado para revisão. Registrar responsável técnico, evidências e aprovação antes da emissão definitiva."),
       p(`Goiânia, ${shortDate(report.generatedAt)}.\nFS Soluções Tributárias · Assessoria tributária e planejamento fiscal\n${report.id} · Versão ${report.version}`),

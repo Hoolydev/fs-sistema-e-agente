@@ -37,15 +37,16 @@ function fakeFetch(pgfnStatus: number, pgfnBody: unknown, cadastroStatus = 200) 
 }
 const env = { NODE_ENV: 'test', SERPRO_DIVIDA_CONSUMER_KEY: 'k', SERPRO_DIVIDA_CONSUMER_SECRET: 's' } as NodeJS.ProcessEnv, empty = { NODE_ENV: 'test' } as NodeJS.ProcessEnv;
 
-test('parecer preliminar soma só inscrições ativas, separa as demais e mantém RFB pendente', () => {
+test('parecer preliminar soma todas as inscrições ativas, separa por situação e mantém RFB pendente', () => {
   const report = preliminaryReport({ cnpj: CNPJ, cadastro, pgfn: evidence('inscricoes'), reportId: 'FS-PRE-1', version: 1 });
   assert.equal(report.mode, 'real'); assert.equal(report.company.name, cadastro.name);
-  assert.deepEqual(report.debts.map(d => d.id), ['80 1 26 000001-10']);
+  assert.deepEqual(report.debts.map(d => d.id), ['80 1 26 000001-10', '80 1 26 000002-00']);
   assert.equal(report.sources.find(s => s.id === 'rfb')?.status, 'pendente'); assert.equal(report.sources.find(s => s.id === 'pgfn')?.status, 'coletado');
   assert.ok(report.pending[0].includes('47.733.961/0001-79'));
   assert.equal(report.pending[0], procuracaoInstruction());
-  const totals = summarize(report); assert.equal(totals.pgfn, 123456); assert.equal(totals.rfb, null); assert.equal(totals.total, null);
-  assert.ok(report.supplements?.some(s => s.title.startsWith('PGFN - inscrições em outras') && s.rows[0][1] === 'ATIVA AJUIZADA' && s.rows[0][4] === 'Sim'));
+  const totals = summarize(report); assert.equal(totals.pgfn, 173456); assert.equal(totals.rfb, null); assert.equal(totals.total, null);
+  assert.ok(report.supplements?.some(s => s.title === 'PGFN - inscrições ativas por situação' && s.rows[0][0] === 'Em cobrança' && s.rows[0][1] === '2'));
+  assert.equal(report.debts[1].judicialProcess, '5000001-11.2026.4.04.7000');
   assert.ok(report.supplements?.some(s => s.title === 'PGFN - inscrições extintas'));
   assert.ok(report.supplements?.some(s => s.title === 'Cadastro público do CNPJ'));
   assert.ok(report.opinion?.judicialNote.startsWith('1 inscrições'));

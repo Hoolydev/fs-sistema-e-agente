@@ -17,7 +17,12 @@ export function isValidCnpj(value: string): boolean {
 }
 const amount = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const text = z.string().min(1).max(12000);
-const sourceSchema = z.object({ id: text, title: text, provider: text, collectedAt: z.string().datetime(), status: z.enum(["demonstrativo", "coletado", "pendente"]), note: text });
+const sourceSchema = z.object({ id: text, title: text, provider: text, collectedAt: z.string().datetime(), status: z.enum(["demonstrativo", "coletado", "declarado", "pendente"]), note: text });
+// "declarado": leitura feita pelo analista em documento do cliente (ex.: Receita Federal sem procuração), não coletada pelo sistema.
+// rfbDeclaration registra o que o analista leu mesmo quando não há valores (a fonte continua pendente e sem dívidas atribuídas).
+const rfbDeclarationSchema = z.object({ hasDebts: z.boolean(), count: z.number().int().nonnegative().max(9999).nullable(), reference: text, analyst: text, note: z.string().max(2000).nullable() });
+// Documentos da empresa anexados ao parecer (arquivos do acervo, preservados sem alteração).
+const annexSchema = z.object({ id: z.string().regex(/^doc_[a-zA-Z0-9-]{1,80}$/), name: text, type: text, createdAt: z.string().datetime(), sha256: z.string().regex(/^[a-f0-9]{64}$/) });
 const debtSchema = z.object({ id: text, origin: z.enum(["PGFN", "RFB"]), tax: text, period: text, status: text, administrativeProcess: text.nullable(), judicialProcess: text.nullable(), registeredAt: text.nullable(), principal: amount.nullable(), fine: amount.nullable(), interest: amount.nullable(), charges: amount.nullable(), total: amount, sourceId: text });
 export const reportSchema = z.object({
   id: text, version: z.number().int().positive(), mode: z.enum(["demo", "real"]), company: z.object({ name: text, cnpj: z.string().refine(isValidCnpj), regime: text }), generatedAt: z.string().datetime(),
@@ -27,9 +32,19 @@ export const reportSchema = z.object({
   opinion: opinionSchema.optional(),
   supplements: z.array(z.object({ title: text, note: text, headers: z.array(text).min(1).max(8), rows: z.array(z.array(text)) })).optional(),
   pending: z.array(text), recommendations: z.array(text), conclusion: text,
+  rfbDeclaration: rfbDeclarationSchema.optional(), annexes: z.array(annexSchema).max(30).optional(),
 });
 export type DiagnosticReport = z.infer<typeof reportSchema>;
 export type Debt = DiagnosticReport["debts"][number];
+// Situação de uma inscrição ativa, pelo texto da fonte. Negociada/parcelada, suspensa ou garantida continua no passivo
+// (dívida ativa até a quitação), mas é apresentada separada de "em cobrança".
+export type PgfnSituation = "cobranca" | "negociada" | "suspensa" | "garantida";
+export const pgfnSituationLabels: Record<PgfnSituation, string> = { cobranca: "Em cobrança", negociada: "Negociada / parcelada", suspensa: "Exigibilidade suspensa", garantida: "Garantida" };
+export function pgfnSituation(status: string): PgfnSituation {
+  const s = status.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+  return /NEGOCIAD|PARCELAD|TRANSACIONAD/.test(s) ? "negociada" : /SUSPENS/.test(s) ? "suspensa" : /GARANTI/.test(s) ? "garantida" : "cobranca";
+}
+export const isJudicialStatus = (status: string) => /\bAJUIZADA\b/i.test(status) && !/N[AÃ]O\s+AJUIZ/i.test(status);
 export function summarize(report: DiagnosticReport) {
   const totalFor = (origin: "RFB" | "PGFN") => {
     if (!report.sources.some(s => s.id === origin.toLowerCase() && s.status !== "pendente")) return null;

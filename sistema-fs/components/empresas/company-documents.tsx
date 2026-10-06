@@ -6,7 +6,8 @@ import { useController } from "@/components/controller/context";
 import { formatDay } from "@/lib/controller/model";
 import { documentChecklist, documentTypeLabel, documentTypes, type DocumentTypeId } from "@/lib/documentos/tipos";
 
-type Doc = { id: string; name: string; kind: string; createdAt: string; docType?: string | null; source: string };
+export type CompanyDoc = { id: string; name: string; kind: string; createdAt: string; docType?: string | null; source: string };
+type Doc = CompanyDoc;
 async function loadDocuments(cnpj: string): Promise<Doc[]> {
   const r = await fetch(`/api/documentos?q=${cnpj}`, { cache: "no-store" });
   const d = r.ok ? await r.json() : { documents: [] };
@@ -17,6 +18,7 @@ function guessType(name: string): DocumentTypeId {
   const n = name.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
   if (/cnpj/.test(n)) return "cartao_cnpj"; if (/contrato/.test(n)) return "contrato_social"; if (/procura/.test(n)) return "procuracao";
   if (/traslado|cessao/.test(n)) return "traslado_cessao"; if (/ouricuri/.test(n)) return "certidao_ouricuri"; if (/transito/.test(n)) return "certidao_transito";
+  if (/situacao|sitfis|relatorio.*fiscal|fiscal/.test(n)) return "situacao_fiscal";
   if (/rg|cnh|cpf|identidade|pessoal/.test(n)) return "documento_pessoal"; if (/comprovante|pix|boleto|pagamento/.test(n)) return "comprovante";
   return "outro";
 }

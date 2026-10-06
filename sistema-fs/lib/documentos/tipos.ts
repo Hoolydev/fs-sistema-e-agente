@@ -7,6 +7,7 @@ export const documentTypes = [
   { id: "traslado_cessao", label: "Traslado / cessão", required: true },
   { id: "certidao_ouricuri", label: "Certidão Ouricuri", required: true },
   { id: "certidao_transito", label: "Certidão de trânsito", required: true },
+  { id: "situacao_fiscal", label: "Relatório de situação fiscal (RFB)", required: false },
   { id: "comprovante", label: "Comprovante de pagamento", required: false },
   { id: "outro", label: "Outro documento", required: false },
 ] as const;

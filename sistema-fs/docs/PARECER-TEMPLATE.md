@@ -27,6 +27,15 @@ Referência de estrutura: `materiais-cliente/Parecer_SOSTributo_GPA_Construcoes.
 - Datas de adesão, liberação e impedimentos são campos do caso; não se presume uma janela vigente.
 - Conteúdo jurídico, interpretação, evidências, aprovação e conclusão são dados do parecer. O template não valida normas nem define sozinho uma estratégia jurídica.
 
+## Abertura, índice de saúde fiscal e leitura manual (06/10/2026)
+
+- **Topo do parecer.** Com cenário de transação, mantém passivo PGFN, desconto, economia e valor a pagar. Sem cenário (caso dos preliminares e da RBE), mostra passivo federal, dívida ativa PGFN, Receita Federal e o **índice de saúde fiscal**, em vez de campos vazios. O quadro de desembolso sem cenário vira uma nota, sem tabela "Não simulado".
+- **Índice de saúde fiscal (0–100)**, em `lib/diagnostico/opinion.ts` (`fiscalHealth`), compartilhado por tela e PDF: dívida ativa PGFN (30), débitos na Receita (25), cobrança judicial (20), possibilidade de certidão (15) e qualidade das fontes (10). Faixas: 80+ Saudável, 60–79 Atenção, 40–59 Risco elevado, abaixo de 40 Crítico. Fator sem fonte fica "não avaliado" e o índice é marcado como parcial; ausência de fonte nunca pontua como regular. É indicador interno, não CAPAG nem rating da PGFN. A tabela "como foi calculado" acompanha o índice.
+- **Inscrições PGFN.** Toda inscrição não extinta compõe o passivo (é o "valor total da dívida" do Regularize), com a situação da fonte. Negociada/parcelada, suspensa ou garantida é separada de "em cobrança" (`pgfnSituation`), pesa menos no índice e aparece no quadro "PGFN - inscrições ativas por situação". Situação "AJUIZADA" conta como referência judicial mesmo sem número de juízo. Correção de 06/10/2026: antes, só "ATIVA EM COBRANCA" era somada, e empresas com tudo negociado no SISPAR saíam com passivo zero.
+- **Receita Federal sem procuração.** Na tela de análise, o analista informa a leitura feita em documento do cliente: débitos discriminados ou valor global viram fonte `declarado` ("leitura do analista") e entram no total; só "há débitos", sem valor, mantém a fonte pendente e registra `rfbDeclaration`. O parecer identifica a leitura como não coletada pelo sistema e pede confirmação na Situação Fiscal oficial.
+- **Anexos.** Documentos da empresa escolhidos na análise ficam listados no parecer (`annexes`, com SHA-256). `GET /api/documentos/:id/completo` gera na hora um PDF único com o parecer e os arquivos originais (imagens viram página); o que passar de 4 MB é listado numa página final.
+- **Complemento e correção sem nova cobrança.** Complementar uma análise dentro da janela de 24 h (leitura da Receita ou anexos) gera nova versão reaproveitando a evidência PGFN guardada. `reissuePreliminary` reemite um preliminar antigo pela regra atual, também sem nova consulta.
+
 ## Limite atual
 
 O sistema apresenta o template e exporta o PDF demonstrativo. Consultas reais, preenchimento automático dos dados e revisão/assinatura técnica ainda dependem da integração e dos documentos do cliente. Não há coleta fiscal realizada por este ajuste.
