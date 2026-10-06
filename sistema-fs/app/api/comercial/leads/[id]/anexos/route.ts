@@ -1,9 +1,9 @@
-import { requireSession } from "@/lib/auth/server";
+import { requireInternal } from "@/lib/auth/server";
 import {sameOrigin,boundedBody} from '@/lib/comercial/security';
 import {getLead,addAttachment} from '@/lib/comercial/store';
 export const runtime='nodejs';
 export async function POST(request:Request,{params}:{params:Promise<{id:string}>}){
-  const denied = await requireSession(request); if (denied) return denied;
+  const denied = await requireInternal(request); if (denied) return denied;
   if(!sameOrigin(request))return Response.json({message:'Origem inválida.'},{status:403});
   try{const {id}=await params;if(!await getLead(id))return Response.json({message:'Contato não encontrado.'},{status:404});
     const body=await boundedBody(request,3*1024*1024+20000);const form=await new Response(body,{headers:{'Content-Type':request.headers.get('content-type')??''}}).formData();const file=form.get('file'),kind=form.get('kind');

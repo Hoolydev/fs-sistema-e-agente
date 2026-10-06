@@ -14,9 +14,13 @@ import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { navigation, descriptions } from "./data";
 
+// Áreas da equipe FS; o usuário externo não as vê no menu nem por endereço direto.
+const internalScreens = ["comercial", "contabilidade", "juridico", "aprovacoes"];
+
 function Navigation({ screen }: { screen: string }) {
   const { setOpenMobile } = useSidebar();
-  const { inbox } = useController();
+  const { inbox, allowed, loading } = useController();
+  const visible = (id: string) => !internalScreens.includes(id) || (!loading && allowed.internal);
   return (
     <Sidebar className="fs-sidebar">
       <SidebarHeader className="brand-header"><button className="mobile-nav-close" aria-label="Fechar menu" onClick={() => setOpenMobile(false)}><X size={20}/></button>
@@ -29,7 +33,7 @@ function Navigation({ screen }: { screen: string }) {
         {navigation.map((g) => (
           <div className="nav-group" key={g.group}>
             <span className="nav-label">{g.group}</span>
-            {g.items.map((item) => (
+            {g.items.filter((item) => visible(item.id)).map((item) => (
               <Link
                 key={item.id}
                 href={`/${item.id}`}
@@ -59,7 +63,8 @@ function Navigation({ screen }: { screen: string }) {
 
 function Shell({ screen, children }: { screen: string; children?: ReactNode }) {
   const title = screen === "conta" ? "Minha conta" : navigation.flatMap((g) => g.items).find((i) => i.id === screen)?.label || "Página inicial";
-  const { processes, inbox, allowed, open, notice, notify } = useController();
+  const { processes, inbox, allowed, open, notice, notify, loading } = useController();
+  const restricted = internalScreens.includes(screen) && !loading && !allowed.internal;
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -142,7 +147,7 @@ function Shell({ screen, children }: { screen: string; children?: ReactNode }) {
             {screen === "comercial" && <div className="heading-actions"><span className="demo-tag">Contatos do site</span></div>}
           </div>
           }
-          {children ?? <ModuleView screen={screen} />}
+          {restricted ? <div className="panel empty-state ctrl-empty-module"><ShieldCheck size={34} strokeWidth={1.4} /><strong>Área da equipe FS</strong><p>Seu acesso é externo: você vê e altera apenas as empresas, processos e documentos que você mesmo incluiu.</p><Link className="text-link" href="/controller">Ir para o Controller</Link></div> : children ?? <ModuleView screen={screen} />}
           <footer className="page-footer">
             <span>
               FS Soluções Tributárias <span>© 2026</span>

@@ -15,7 +15,8 @@ type Value = {
   selected: ControllerProcess | "novo" | NewProcess | null; open: (target: ControllerProcess | "novo" | NewProcess | null) => void;
   // Empresas cadastradas (Administrativo) e as presentes no Controller; painel da empresa aberto.
   companies: Company[]; companySelected: string | "nova" | null; openCompany: (target: string | "nova" | null) => void;
-  allowed: { create: boolean; edit: boolean; review: boolean; remove: boolean; users: boolean };
+  // internal = equipe FS; externo enxerga só o que incluiu e não entra nas áreas internas.
+  allowed: { create: boolean; edit: boolean; review: boolean; remove: boolean; users: boolean; internal: boolean };
   // O que pede ação de quem está logado: revisores veem o que aguarda revisão; inclusão de dados vê os ajustes pedidos.
   inbox: ControllerProcess[];
   notice: string; notify: (text: string) => void;
@@ -54,7 +55,7 @@ export function ControllerProvider({ children }: { children: ReactNode }) {
     const review = can(role, { processo: ["revisar"] });
     return {
       processes, metrics: controllerMetrics(processes), role, loading, error, reload, selected, open, companies, companySelected, openCompany,
-      allowed: { create: can(role, { processo: ["incluir"] }), edit: can(role, { processo: ["editar"] }), review, remove: can(role, { processo: ["excluir"] }), users: can(role, { user: ["create"] }) },
+      allowed: { create: can(role, { processo: ["incluir"] }), edit: can(role, { processo: ["editar"] }), review, remove: can(role, { processo: ["excluir"] }), users: can(role, { user: ["create"] }), internal: can(role, { interno: ["acessar"] }) },
       inbox: processes.filter(p => p.reviewState === (review ? "pendente" : "ajustes")),
       notice, notify,
     };

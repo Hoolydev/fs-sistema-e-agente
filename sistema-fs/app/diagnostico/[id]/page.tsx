@@ -4,6 +4,8 @@ import { notFound, redirect } from 'next/navigation';
 import Dashboard from '@/components/fs/dashboard';
 import { FiscalOpinion } from '@/components/diagnostico/fiscal-opinion';
 import { getAuth } from '@/lib/auth/server';
+import { roleOf } from '@/lib/auth/roles';
+import { scopeFor } from '@/lib/auth/scope';
 import { savedReport } from '@/lib/diagnostico/store';
 import { auditDocument } from '@/lib/documentos/store';
 import { formatCnpj, money, summarize } from '@/lib/diagnostico/model';
@@ -13,7 +15,7 @@ export default async function SavedDiagnosticPage({ params }: { params: Promise<
   const session = await getAuth().api.getSession({ headers: await headers() });
   if (!session) redirect('/login');
   const { id } = await params;
-  const report = await savedReport(id);
+  const report = await savedReport(id, scopeFor({ id: session.user.id, role: roleOf(session.user) }));
   if (!report) notFound();
   await auditDocument(session.user.id, 'view-report', id);
   const totals = summarize(report);

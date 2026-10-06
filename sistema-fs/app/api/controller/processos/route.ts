@@ -2,11 +2,12 @@ import { requirePermission } from "@/lib/auth/server";
 import { fieldsMessage, jsonBody, reply, storeError } from "@/lib/controller/http";
 import { fieldLabels, processSchema } from "@/lib/controller/model";
 import { createProcess, listProcesses } from "@/lib/controller/store";
+import { scopeFor } from "@/lib/auth/scope";
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   const { actor, denied } = await requirePermission(request); if (denied) return denied;
-  try { return reply({ processes: await listProcesses(), role: actor.role }); } catch (error) { return storeError(error); }
+  try { return reply({ processes: await listProcesses(scopeFor(actor)), role: actor.role }); } catch (error) { return storeError(error); }
 }
 export async function POST(request: Request) {
   const { actor, denied } = await requirePermission(request, { processo: ["incluir"] }); if (denied) return denied;

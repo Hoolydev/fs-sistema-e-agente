@@ -53,3 +53,5 @@ export async function requirePermission(request: Request, permissions?: Permissi
   if (permissions && !can(role, permissions)) return { denied: Response.json({ message: "Seu perfil de acesso não permite esta ação." }, { status: 403, headers }) };
   return { actor: { id: session.user.id, name: session.user.name, role } };
 }
+// Áreas internas (Comercial): sessão válida e perfil que não seja externo.
+export async function requireInternal(request: Request) { const { denied } = await requirePermission(request, { interno: ["acessar"] }); return denied ?? null; }

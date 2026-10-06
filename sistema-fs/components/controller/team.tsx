@@ -13,8 +13,11 @@ import { agentTaskLabels, agentTasks, can, formatPhone, normalizePhone, parseAge
 import { useController } from "./context";
 
 type Member = { id: string; name: string; email: string; role?: string | null; banned?: boolean | null; phone?: string | null; agentTasks?: string | null };
-const matrix: { label: string; permissions: Permissions }[] = [
-  { label: "Consultar processos, documentos e diagnósticos", permissions: {} },
+const matrix: { label: string; permissions: Permissions; only?: Role[] }[] = [
+  { label: "Consultar processos, documentos e diagnósticos da FS", permissions: { interno: ["acessar"] } },
+  { label: "Ver somente o que ele mesmo incluiu (acesso externo)", permissions: {}, only: ["externo"] },
+  { label: "Analisar CNPJ, cadastrar empresas e enviar documentação", permissions: { processo: ["incluir"] } },
+  { label: "Acessar Comercial e Aprovações", permissions: { interno: ["acessar"] } },
   { label: "Incluir e editar registros no Controller", permissions: { processo: ["incluir", "editar"] } },
   { label: "Revisar: aprovar ou pedir ajustes", permissions: { processo: ["revisar"] } },
   { label: "Excluir registros", permissions: { processo: ["excluir"] } },
@@ -86,7 +89,7 @@ export function TeamSettings() {
     <Tabs defaultValue="perfil" className="preferences">
       <TabsList variant="line" className="standalone-tabs">
         <TabsTrigger value="perfil">Meu perfil</TabsTrigger>
-        <TabsTrigger value="equipe">Equipe e permissões</TabsTrigger>
+        {allowed.internal && <TabsTrigger value="equipe">Equipe e permissões</TabsTrigger>}
       </TabsList>
       <TabsContent value="perfil">
         <div className="settings-grid">
@@ -131,7 +134,7 @@ export function TeamSettings() {
               {matrix.map(row => (
                 <TableRow key={row.label}>
                   <TableCell>{row.label}</TableCell>
-                  {roleOrder.map(r => <TableCell key={r}>{!Object.keys(row.permissions).length || can(r, row.permissions) ? <Check size={16} className="positive" aria-label="Permitido" /> : <Minus size={16} className="muted" aria-label="Não permitido" />}</TableCell>)}
+                  {roleOrder.map(r => <TableCell key={r}>{row.only ? row.only.includes(r) : (!Object.keys(row.permissions).length || can(r, row.permissions)) ? <Check size={16} className="positive" aria-label="Permitido" /> : <Minus size={16} className="muted" aria-label="Não permitido" />}</TableCell>)}
                 </TableRow>
               ))}
             </TableBody>

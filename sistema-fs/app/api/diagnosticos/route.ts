@@ -1,4 +1,6 @@
 import { sessionFor } from "@/lib/auth/server";
+import { roleOf } from "@/lib/auth/roles";
+import { scopeFor } from "@/lib/auth/scope";
 import { NextResponse } from "next/server";
 import { isValidCnpj, normalizeCnpj } from "@/lib/diagnostico/model";
 import { PgfnError } from "@/lib/diagnostico/pgfn";
@@ -20,7 +22,8 @@ export async function POST(request: Request) {
   // force = pedido explícito de nova versão (nova consulta PGFN cobrada), ignorando a janela de reaproveitamento.
   const force = typeof body === "object" && body !== null && "force" in body && body.force === true;
   try {
-    const result = await runPreliminaryDiagnostic(normalizeCnpj(raw), session.user.id, { force });
+    // Externo só reaproveita e arquiva pareceres próprios.
+    const result = await runPreliminaryDiagnostic(normalizeCnpj(raw), session.user.id, { force, scope: scopeFor({ id: session.user.id, role: roleOf(session.user) }) });
     return NextResponse.json({ ...result, message: result.reused ? "Já existe um diagnóstico recente deste CNPJ. Reabrindo o parecer arquivado, sem nova consulta." : "Diagnóstico preliminar emitido: PGFN e cadastro coletados; Receita Federal pendente de procuração." }, { status: result.reused ? 200 : 201, headers });
   } catch (error) {
     if (error instanceof PgfnError) {

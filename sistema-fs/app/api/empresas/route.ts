@@ -2,11 +2,12 @@ import { requirePermission } from "@/lib/auth/server";
 import { fieldsMessage, jsonBody, reply, storeError } from "@/lib/controller/http";
 const labels = { name: "razão social", cnpj: "CNPJ", notes: "observações" };
 import { companySchema, createCompany, listCompanies, updateCompany } from "@/lib/empresas/store";
+import { scopeFor } from "@/lib/auth/scope";
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
-  const { denied } = await requirePermission(request); if (denied) return denied;
-  try { return reply({ companies: await listCompanies() }); } catch (error) { return storeError(error); }
+  const { actor, denied } = await requirePermission(request); if (denied) return denied;
+  try { return reply({ companies: await listCompanies(scopeFor(actor)) }); } catch (error) { return storeError(error); }
 }
 // Cadastrar empresa: qualquer perfil que inclui registros no Controller.
 export async function POST(request: Request) {

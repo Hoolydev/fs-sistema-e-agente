@@ -1,13 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { requirePermission, requireSession } from "@/lib/auth/server";
+import { requirePermission } from "@/lib/auth/server";
 import { sameOrigin } from "@/lib/comercial/security";
 import { detectMime } from "@/lib/documentos/access";
 import { archiveDocument, auditDocument, documentKinds, documents } from "@/lib/documentos/store";
 import { isValidCnpj, normalizeCnpj } from "@/lib/diagnostico/model";
 import { listCompanies } from "@/lib/empresas/store";
 import { isDocumentType } from "@/lib/documentos/tipos";
+import { ownerFor, scopeFor } from "@/lib/auth/scope";
 export const runtime="nodejs";
-export async function GET(request:Request){const denied=await requireSession(request);if(denied)return denied;try{const q=(new URL(request.url).searchParams.get('q')??'').slice(0,160);const found=await documents(q);return Response.json({documents:found,total:found.length},{headers:{'Cache-Control':'private, no-store'}});}catch{return Response.json({message:'Não foi possível carregar o acervo.'},{status:503});}}
+export async function GET(request:Request){const {actor,denied}=await requirePermission(request);if(denied)return denied;try{const q=(new URL(request.url).searchParams.get('q')??'').slice(0,160);const found=await documents(q,false,scopeFor(actor));return Response.json({documents:found,total:found.length},{headers:{'Cache-Control':'private, no-store'}});}catch{return Response.json({message:'Não foi possível carregar o acervo.'},{status:503});}}
 const MAX = 3 * 1024 * 1024, MAX_FILES = 10;
 // Envio pela tela: vários arquivos de uma vez para uma empresa (PDF, JPG ou PNG, até 3 MB cada).
 export async function POST(request: Request) {
@@ -24,14 +25,14 @@ export async function POST(request: Request) {
   // Um tipo por arquivo, na mesma ordem; sem tipo informado entra como "outro".
   const types = form.getAll("types").map(String);
   if (types.some(t => !isDocumentType(t))) return Response.json({ message: "Tipo de documento desconhecido." }, { status: 422 });
-  const company = (await listCompanies().catch(() => [])).find(c => c.cnpj === cnpj)?.name ?? `CNPJ ${cnpj}`;
+  const company = (await listCompanies(scopeFor(actor)).catch(() => [])).find(c => c.cnpj === cnpj)?.name ?? `CNPJ ${cnpj}`;
   const saved: { id: string; name: string }[] = [], rejected: string[] = [];
   for (const [index, file] of files.entries()) {
     const docType = types[index] ?? "outro", fileKind = docType === "comprovante" ? "comprovante" : kind;
     const content = Buffer.from(await file.arrayBuffer()), mime = detectMime(content);
     if (file.size > MAX || !mime) { rejected.push(file.name); continue; }
     const name = (file.name || "documento").replace(/[^\p{L}\p{N}._ -]/gu, "_").slice(0, 150);
-    const id = await archiveDocument({ externalId: `web-${randomUUID()}`, cnpj, company, name, kind: fileKind, createdAt: new Date().toISOString(), mime, source: actor.name, docType }, content);
+    const id = await archiveDocument({ externalId: `web-${randomUUID()}`, cnpj, company, name, kind: fileKind, createdAt: new Date().toISOString(), mime, source: actor.name, docType, ownerId: ownerFor(actor) }, content);
     await auditDocument(actor.name, "upload", id);
     saved.push({ id, name });
   }

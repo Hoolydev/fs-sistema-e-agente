@@ -3,6 +3,7 @@ import { query } from '@/lib/comercial/store';
 import { archiveDocument, setupDocuments } from '@/lib/documentos/store';
 import { validateReport } from './model';
 import { generateDiagnosticPdf } from './pdf';
+import { ownedBy, type Scope } from '@/lib/auth/scope';
 
 export function validateCanonicalReport(input: unknown) {
   const report = validateReport(input);
@@ -12,16 +13,16 @@ export function validateCanonicalReport(input: unknown) {
   return report;
 }
 
-export async function savedReport(documentId: string) {
+export async function savedReport(documentId: string, scope: Scope = null) {
   if (!/^doc_[a-zA-Z0-9-]{1,80}$/.test(documentId)) return null;
   await setupDocuments();
-  const [row] = await query('SELECT payload FROM fs_diagnostic_reports WHERE document_id=$1', [documentId.slice(4)]);
-  return row ? validateCanonicalReport(JSON.parse(String(row.payload))) : null;
+  const [row] = await query('SELECT r.payload, d.owner_id FROM fs_diagnostic_reports r JOIN fs_documents d ON d.id=r.document_id WHERE r.document_id=$1', [documentId.slice(4)]);
+  return row && ownedBy(scope, row.owner_id ? String(row.owner_id) : null) ? validateCanonicalReport(JSON.parse(String(row.payload))) : null;
 }
 
 // Both the screen and immutable PDF are emitted from this exact validated payload.
 // Retry reuses the document; an interrupted payload insert can be reconciled safely.
-export async function archiveCanonicalReport(externalId: string, input: unknown, logo: Uint8Array) {
+export async function archiveCanonicalReport(externalId: string, input: unknown, logo: Uint8Array, ownerId: string | null = null) {
   const report = validateCanonicalReport(input);
   if (typeof externalId !== 'string' || !/^[a-zA-Z0-9._-]{1,150}$/.test(externalId)) throw new Error('INVALID_EXTERNAL_ID');
   const payload = JSON.stringify(report), hash = createHash('sha256').update(payload).digest('hex');
@@ -33,7 +34,7 @@ export async function archiveCanonicalReport(externalId: string, input: unknown,
   }
   const content = Buffer.from(generateDiagnosticPdf(report, logo));
   if (content.length > 3 * 1024 * 1024) throw new Error('PDF_TOO_LARGE');
-  const id = await archiveDocument({ externalId, cnpj: report.company.cnpj, company: report.company.name, name: `Parecer FS ${report.company.cnpj} v${report.version}.pdf`, kind: 'parecer', createdAt: report.generatedAt }, content);
+  const id = await archiveDocument({ externalId, cnpj: report.company.cnpj, company: report.company.name, name: `Parecer FS ${report.company.cnpj} v${report.version}.pdf`, kind: 'parecer', createdAt: report.generatedAt, ownerId }, content);
   await query('INSERT INTO fs_diagnostic_reports (document_id,payload,input_sha256) VALUES ($1,$2,$3) ON CONFLICT(document_id) DO NOTHING', [id.slice(4), payload, hash]);
   const [stored] = await query('SELECT input_sha256 FROM fs_diagnostic_reports WHERE document_id=$1', [id.slice(4)]);
   if (stored.input_sha256 !== hash) throw new Error('ARCHIVE_CONFLICT');
