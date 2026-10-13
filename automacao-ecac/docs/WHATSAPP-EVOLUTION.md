@@ -16,8 +16,10 @@ instalada na própria VPS em um projeto separado: `/opt/fs-evolution` (arquivos 
 
 ## Conectar ou reconectar o chip
 
-No Mac, rode `.local/whatsapp-qr.sh` (fora do Git) e escaneie em até 20 segundos no celular do chip:
-WhatsApp > Dispositivos conectados > Conectar dispositivo. Se o QR expirar, rode de novo.
+No Mac, rode `.local/whatsapp-qr.sh` (fora do Git). Sem argumento, abre um QR que vale cerca de 1 minuto:
+escanear no celular do chip em WhatsApp > Dispositivos conectados > Conectar dispositivo. Com o número do chip
+(`.local/whatsapp-qr.sh 62999990000`), mostra um código de 8 letras para digitar em "Conectar com número de telefone".
+O comando reinicia a tentativa para o QR ou código sair novo e espera até 3 minutos pela conexão.
 Queda de sessão aparece no log do agente como `evolution whatsapp session disconnected`.
 
 ## Riscos
