@@ -139,7 +139,7 @@ export class OrchestratorService {
   private async archiveReceipt(caller: Caller, media: InboundMedia, company: { cnpj: string; name: string }, messageId: string) {
     const phone = caller.phone;
     try {
-      const { content, mime } = await downloadMedia(media.url, this.config.MEDIA_MAX_BYTES, this.fetcher);
+      const { content, mime } = this.whatsapp.fetchMedia ? await this.whatsapp.fetchMedia(media.url, this.config.MEDIA_MAX_BYTES) : await downloadMedia(media.url, this.config.MEDIA_MAX_BYTES, this.fetcher);
       const stamp = new Date().toISOString().slice(0, 10);
       const filename = `Comprovante ${company.cnpj} ${stamp} ${randomUUID().slice(0, 8)}.${acceptedMedia[mime]}`;
       const result = await this.platform!.archiveReceipt({ externalId: `wa-comprovante-${messageId}`.replace(/[^a-zA-Z0-9._-]/g, "").slice(0, 150), cnpj: company.cnpj, company: company.name, filename, mime, note: (media.caption ?? "").slice(0, 300), content }, phone);

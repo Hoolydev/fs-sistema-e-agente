@@ -92,3 +92,45 @@ export function extractZApiInboundMessages(
   if (document && /^https:\/\//.test(document)) return [{ ...base, type: "document", media: { url: document, mimeType: message.document?.mimeType ?? "application/octet-stream", fileName: message.document?.fileName ?? message.document?.title ?? "documento", ...(message.document?.caption ? { caption: message.document.caption } : {}) } }];
   return [{ ...base, type: "unsupported" }];
 }
+
+// Evolution API (Baileys). Só conversas individuais recebidas; grupos, status, canais e mensagens próprias são ignorados.
+interface EvolutionMediaMessage { caption?: string; mimetype?: string; fileName?: string; title?: string }
+interface EvolutionPayload {
+  event?: string;
+  instance?: string;
+  data?: {
+    key?: { id?: string; remoteJid?: string; remoteJidAlt?: string; senderPn?: string; fromMe?: boolean };
+    messageTimestamp?: number | string;
+    message?: {
+      conversation?: string;
+      extendedTextMessage?: { text?: string };
+      imageMessage?: EvolutionMediaMessage;
+      documentMessage?: EvolutionMediaMessage;
+      documentWithCaptionMessage?: { message?: { documentMessage?: EvolutionMediaMessage } };
+    };
+  };
+}
+export const evolutionEvent = (payload: unknown) => String((payload as EvolutionPayload)?.event ?? "").toLowerCase().replace(/_/g, ".");
+// Celular brasileiro antigo aparece no WhatsApp sem o nono dígito (55 + DDD + 8 dígitos); o cadastro da equipe usa 13 dígitos.
+export function brazilianMobile(phone: string) {
+  return /^55\d{2}[6-9]\d{7}$/.test(phone) ? `${phone.slice(0, 4)}9${phone.slice(4)}` : phone;
+}
+export function extractEvolutionInboundMessages(payload: unknown, expectedInstance: string): InboundMessage[] {
+  const body = payload as EvolutionPayload;
+  if (evolutionEvent(payload) !== "messages.upsert" || body.instance !== expectedInstance) return [];
+  const data = body.data, key = data?.key;
+  if (!data || !key?.id || key.fromMe || !key.remoteJid || /@(g\.us|broadcast|newsletter)$/.test(key.remoteJid)) return [];
+  // Com o endereçamento LID, o número real vem em remoteJidAlt/senderPn.
+  const jid = [key.remoteJid, key.remoteJidAlt, key.senderPn].find(v => typeof v === "string" && /^\d{8,15}@s\.whatsapp\.net$/.test(v));
+  const seconds = Number(data.messageTimestamp);
+  if (!jid || !Number.isFinite(seconds)) return [];
+  const base = { messageId: key.id, from: brazilianMobile(jid.split("@")[0]!), timestamp: new Date(seconds < 1_000_000_000_000 ? seconds * 1000 : seconds) };
+  const m = data.message ?? {};
+  const text = m.conversation ?? m.extendedTextMessage?.text;
+  if (text) return [{ ...base, type: "text", text }];
+  const media = `evolution-media:${key.id}`;
+  if (m.imageMessage) return [{ ...base, type: "image", media: { url: media, mimeType: m.imageMessage.mimetype ?? "image/jpeg", ...(m.imageMessage.caption ? { caption: m.imageMessage.caption } : {}) } }];
+  const document = m.documentMessage ?? m.documentWithCaptionMessage?.message?.documentMessage;
+  if (document) return [{ ...base, type: "document", media: { url: media, mimeType: document.mimetype ?? "application/octet-stream", fileName: document.fileName ?? document.title ?? "documento", ...(document.caption ? { caption: document.caption } : {}) } }];
+  return [{ ...base, type: "unsupported" }];
+}

@@ -2,6 +2,7 @@ import { extname } from "node:path";
 import { readFile } from "node:fs/promises";
 import type { AppConfig } from "../config.js";
 import type { AppLogger } from "../logger.js";
+import { detectMime, MediaError } from "./media.js";
 
 interface GraphResponse {
   messages?: Array<{ id: string }>;
@@ -19,6 +20,8 @@ interface ZApiResponse {
 export interface WhatsAppGateway {
   sendText(to: string, body: string): Promise<string>;
   sendDocument(to: string, path: string, filename: string, caption: string): Promise<string>;
+  // Provedores cuja mídia recebida não tem link público baixam o arquivo por aqui (Evolution).
+  fetchMedia?(url: string, maxBytes: number): Promise<{ content: Buffer; mime: string }>;
 }
 
 export class MetaWhatsAppGateway implements WhatsAppGateway {
@@ -177,7 +180,81 @@ export class ZApiWhatsAppGateway implements WhatsAppGateway {
   }
 }
 
+// Mídia recebida pela Evolution: o arquivo do WhatsApp é criptografado; a própria Evolution entrega o conteúdo pelo id da mensagem.
+export const EVOLUTION_MEDIA_PREFIX = "evolution-media:";
+const documentMimes: Record<string, string> = { pdf: "application/pdf", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png" };
+interface EvolutionResponse { key?: { id?: string }; base64?: string; message?: unknown; response?: { message?: unknown } }
+
+export class EvolutionWhatsAppGateway implements WhatsAppGateway {
+  constructor(
+    private readonly config: AppConfig,
+    private readonly logger: AppLogger,
+    private readonly fetcher: typeof fetch = fetch,
+  ) {}
+
+  async sendText(to: string, body: string): Promise<string> {
+    if (this.config.WHATSAPP_DRY_RUN) {
+      this.logger.info({ to, body }, "evolution dry-run text");
+      return `dry-run-${Date.now()}`;
+    }
+    return this.requireMessageId(await this.request(`message/sendText/${this.config.EVOLUTION_INSTANCE}`, { number: to, text: body }));
+  }
+
+  async sendDocument(to: string, path: string, filename: string, caption: string): Promise<string> {
+    if (this.config.WHATSAPP_DRY_RUN) {
+      this.logger.info({ to, path, filename, caption }, "evolution dry-run document");
+      return `dry-run-${Date.now()}`;
+    }
+    const extension = extname(filename).slice(1).toLowerCase() || "pdf";
+    const mimetype = documentMimes[extension];
+    if (!mimetype) throw new Error("Extensão de documento inválida para envio pela Evolution");
+    const contents = await readFile(path);
+    return this.requireMessageId(await this.request(`message/sendMedia/${this.config.EVOLUTION_INSTANCE}`, {
+      number: to, mediatype: "document", mimetype, media: contents.toString("base64"), fileName: filename, caption,
+    }));
+  }
+
+  async fetchMedia(url: string, maxBytes: number): Promise<{ content: Buffer; mime: string }> {
+    const id = url.startsWith(EVOLUTION_MEDIA_PREFIX) ? url.slice(EVOLUTION_MEDIA_PREFIX.length) : "";
+    if (!/^[A-Za-z0-9]{6,64}$/.test(id)) throw new MediaError("download_failed");
+    const data = await this.request(`chat/getBase64FromMediaMessage/${this.config.EVOLUTION_INSTANCE}`, { message: { key: { id } }, convertToMp4: false })
+      .catch(() => { throw new MediaError("download_failed"); });
+    const base64 = typeof data.base64 === "string" ? data.base64.replace(/^data:[^,]*,/, "") : "";
+    if (!base64) throw new MediaError("download_failed");
+    if (Math.floor(base64.length * 3 / 4) > maxBytes + 3) throw new MediaError("too_large");
+    const content = Buffer.from(base64, "base64");
+    if (content.length > maxBytes) throw new MediaError("too_large");
+    const mime = detectMime(content);
+    if (!mime) throw new MediaError("unsupported");
+    return { content, mime };
+  }
+
+  private async request(path: string, body: Record<string, unknown>): Promise<EvolutionResponse> {
+    const { EVOLUTION_BASE_URL, EVOLUTION_API_KEY } = this.config;
+    if (!EVOLUTION_BASE_URL || !EVOLUTION_API_KEY) throw new Error("Credenciais da Evolution não configuradas");
+    const response = await this.fetcher(`${EVOLUTION_BASE_URL.replace(/\/$/, "")}/${path}`, {
+      method: "POST",
+      headers: { apikey: EVOLUTION_API_KEY, "content-type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30_000),
+    });
+    const data = (await response.json().catch(() => ({}))) as EvolutionResponse;
+    if (!response.ok) {
+      const detail = data.response?.message ?? data.message ?? response.statusText;
+      throw new Error(`Falha na Evolution (${response.status}): ${typeof detail === "string" ? detail : JSON.stringify(detail).slice(0, 200)}`);
+    }
+    return data;
+  }
+
+  private requireMessageId(response: EvolutionResponse): string {
+    const id = response.key?.id;
+    if (!id) throw new Error("Evolution não retornou o identificador da mensagem");
+    return id;
+  }
+}
+
 export function createWhatsAppGateway(config: AppConfig, logger: AppLogger): WhatsAppGateway {
+  if (config.WHATSAPP_PROVIDER === "evolution") return new EvolutionWhatsAppGateway(config, logger);
   return config.WHATSAPP_PROVIDER === "zapi"
     ? new ZApiWhatsAppGateway(config, logger)
     : new MetaWhatsAppGateway(config, logger);

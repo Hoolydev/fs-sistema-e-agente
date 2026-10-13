@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { AppConfig } from "./config.js";
 import type { AppLogger } from "./logger.js";
 import type { OrchestratorService } from "./orchestrator/service.js";
-import { extractInboundMessages, extractZApiInboundMessages } from "./whatsapp/payload.js";
+import { evolutionEvent, extractEvolutionInboundMessages, extractInboundMessages, extractZApiInboundMessages } from "./whatsapp/payload.js";
 import { verifyMetaSignature } from "./whatsapp/signature.js";
 import { registerMacRoutes, type MacRouteDependencies } from "./mac/routes.js";
 import { bearerMatches, sitfisRequestSchema, type SitfisPublisher } from "./sistema/sitfis.js";
@@ -109,6 +109,27 @@ export async function buildApp(dependencies: AppDependencies) {
       if (messages.length === 0 && !hasExpectedZApiInstance(request.body, config.ZAPI_INSTANCE_ID)) {
         return reply.code(401).send({ error: "invalid_instance" });
       }
+      reply.code(200).send({ received: true });
+      dispatchMessages(messages, orchestrator, logger);
+    },
+  );
+
+  // Evolution API no próprio servidor: chamada só pela rede interna (sem rota pública no Traefik), com token no caminho.
+  app.post<{ Params: { token: string } }>(
+    "/webhooks/evolution/:token",
+    { logLevel: "silent", bodyLimit: 5 * 1024 * 1024 },
+    async (request, reply) => {
+      if (config.WHATSAPP_PROVIDER !== "evolution") return reply.code(404).send({ error: "provider_disabled" });
+      if (!config.EVOLUTION_WEBHOOK_TOKEN || !secureEquals(request.params.token, config.EVOLUTION_WEBHOOK_TOKEN)) return reply.code(401).send({ error: "invalid_webhook_token" });
+      const body = request.body as { instance?: string; data?: { state?: string; statusReason?: number } };
+      if (body?.instance !== config.EVOLUTION_INSTANCE) return reply.code(401).send({ error: "invalid_instance" });
+      const event = evolutionEvent(body);
+      if (event === "connection.update") {
+        const state = body.data?.state;
+        if (state === "close") logger.error({ reason: body.data?.statusReason }, "evolution whatsapp session disconnected");
+        else logger.info({ state }, "evolution connection update");
+      }
+      const messages = extractEvolutionInboundMessages(body, config.EVOLUTION_INSTANCE);
       reply.code(200).send({ received: true });
       dispatchMessages(messages, orchestrator, logger);
     },
