@@ -1,0 +1,49 @@
+# Evolution API (WhatsApp Web via Baileys) do agente FS. Projeto separado do agente, com Postgres e Redis próprios.
+# Só escuta em 127.0.0.1:8095 (consulta de QR pelo servidor) e na rede interna do agente; sem rota pública.
+name: fs-evolution
+services:
+  api:
+    image: evoapicloud/evolution-api:v2.3.7
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "127.0.0.1:8095:8080"
+    volumes:
+      - instances:/evolution/instances
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - default
+      - agente
+    mem_limit: 1g
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: evolution
+      POSTGRES_DB: evolution
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg
+    secrets:
+      - pg
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    mem_limit: 512m
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "no", "--save", "300", "1"]
+    volumes:
+      - redisdata:/data
+    mem_limit: 128m
+secrets:
+  pg:
+    file: ./secrets/pg_password
+volumes:
+  instances:
+  pgdata:
+  redisdata:
+networks:
+  agente:
+    name: fs-automacao-ecac_backend
+    external: true
