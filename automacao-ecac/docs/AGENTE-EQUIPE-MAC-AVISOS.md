@@ -6,7 +6,7 @@ Implementado em 30/09/2026 e implantado na VPS em 01/10/2026 (agente no lugar da
 
 - **Identidade pelo sistema.** O agente pergunta `GET /api/agent/team` quem é o número (nome, perfil, atribuições). Número sem cadastro é recusado. `AUTHORIZED_PHONE_NUMBERS` continua só como transição (pode pedir análise e consultar o acervo).
 - **Comprovantes** (atribuição `comprovantes`): foto ou PDF pela Z-API é baixado (HTTPS, até 3 MB, tipo pelo conteúdo), a empresa é identificada pela legenda (CNPJ ou nome do Controller) ou perguntada, e o arquivo entra no acervo como `comprovante`. O sistema avisa os revisores.
-- **Análises** (atribuição `analises`): confirmação SIM/NÃO e pedido na **fila do Mac do próprio agente** (Redis), com id derivado da mensagem (idempotente). O conector do Mac continua usando `/mac/claim`, `/mac/jobs/:id/status` e `/mac/jobs/:id/result`, agora no agente (`127.0.0.1:3000` pelo túnel SSH, bearer `MAC_BRIDGE_TOKEN`). Etapas avisam o solicitante uma vez; o parecer é arquivado no sistema antes da entrega e os revisores com `avisos` são informados.
+- **Análises** (atribuição `analises`): confirmação SIM/NÃO e pedido na **fila do Mac do próprio agente** (Redis), com id derivado da mensagem (idempotente). O conector do Mac continua usando `/mac/claim`, `/mac/jobs/:id/status` e `/mac/jobs/:id/result`, agora no agente (`https://api.fssolucoestributarias.com.br/mac/...` desde 13/10/2026, bearer `MAC_BRIDGE_TOKEN`; antes pelo túnel SSH em `127.0.0.1:3000`). Etapas avisam o solicitante uma vez; o parecer é arquivado no sistema antes da entrega e os revisores com `avisos` são informados.
 - **Reserva Serpro**: pedido pendente há mais de `MAC_FALLBACK_AFTER_MS` recebe oferta; SIM cancela o pedido do Mac e publica no worker Serpro; NÃO mantém na fila.
 - **Avisos**: a cada `NOTIFICATIONS_POLL_MS` o agente lê `GET /api/agent/notifications` e envia; confirma em `POST /api/agent/notifications/:id`.
 - **Webhook**: o agente aceita `/webhooks/zapi/:token` e também `/zapi/:token` (endereço atual da ponte), com o mesmo `ZAPI_WEBHOOK_TOKEN`.
@@ -18,7 +18,7 @@ Implementado em 30/09/2026 e implantado na VPS em 01/10/2026 (agente no lugar da
 3. No `.env` do agente: `MAC_BRIDGE_TOKEN` (novo valor; copiar para `secrets/bridge.env` do Mac como `BRIDGE_TOKEN`), `ZAPI_WEBHOOK_TOKEN` igual ao `WEBHOOK_TOKEN` da ponte, `FS_SYSTEM_URL=https://app.fssolucoestributarias.com.br`. Manter `WHATSAPP_DRY_RUN=true` até o teste.
 4. `docker compose -f docker-compose.prod.yml -f docker-compose.cert.yml -f docker-compose.webhook.yml -f docker-compose.sitfis.yml up -d --build api worker` (o `sitfis.yml` monta as chaves do Integra Contador de `secrets/serpro`; o certificado da FS é o mesmo do `cert.yml`).
 5. Parar a ponte (`docker stop fs-mac-bridge`) só depois de o agente responder em `https://api.fssolucoestributarias.com.br/zapi/<token>`; o pedido `inflight` antigo da ponte (16/09) não migra.
-6. No Mac: `secrets/bridge.env` com `BRIDGE_URL=http://127.0.0.1:3000` (túnel SSH para a VPS) e o novo token; reiniciar o conector.
+6. No Mac: `secrets/bridge.env` com `BRIDGE_URL=https://api.fssolucoestributarias.com.br` e o token; reiniciar o conector. (Até 13/10/2026 era `http://127.0.0.1:3000` por túnel SSH.)
 7. Teste com `WHATSAPP_DRY_RUN=true` (mensagens só no log), depois `false` com os números cadastrados.
 
 ## Situação Fiscal (SITFIS) pedida pelo sistema (06/10/2026)

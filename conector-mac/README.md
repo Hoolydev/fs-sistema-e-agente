@@ -34,7 +34,7 @@ A instalação via LaunchAgent do protótipo TypeScript em `automacao-ecac/scrip
 
 ## Ponte substituída pelo agente (30/09/2026)
 
-A fila do Mac passou a viver no agente principal (`automacao-ecac`, endpoints `/mac/claim`, `/mac/jobs/:id/status` e `/mac/jobs/:id/result`, bearer `MAC_BRIDGE_TOKEN`). O conector não muda de código: em `secrets/bridge.env`, `BRIDGE_URL` passa a apontar para o agente pelo túnel SSH (`http://127.0.0.1:3000`) e `BRIDGE_TOKEN` recebe o mesmo valor de `MAC_BRIDGE_TOKEN`. Roteiro em `automacao-ecac/docs/AGENTE-EQUIPE-MAC-AVISOS.md`. A seção abaixo descreve a ponte antiga, mantida só até a troca.
+A fila do Mac passou a viver no agente principal (`automacao-ecac`, endpoints `/mac/claim`, `/mac/jobs/:id/status` e `/mac/jobs/:id/result`, bearer `MAC_BRIDGE_TOKEN`). O conector não muda de código: em `secrets/bridge.env`, `BRIDGE_URL=https://api.fssolucoestributarias.com.br` (desde 13/10/2026 o caminho `/mac/` é publicado em HTTPS e protegido pelo token; não precisa de túnel SSH nem da chave do servidor no Mac) e `BRIDGE_TOKEN` recebe o mesmo valor de `MAC_BRIDGE_TOKEN`. O arquivo pronto fica em `.local/conector-mac/bridge.env` no Mac de desenvolvimento. Roteiro em `automacao-ecac/docs/AGENTE-EQUIPE-MAC-AVISOS.md`. A seção abaixo descreve a ponte antiga, mantida só até a troca.
 
 ## Ponte (VPS)
 

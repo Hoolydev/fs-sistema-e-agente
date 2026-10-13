@@ -1,4 +1,5 @@
-# Publica no agente (api) o webhook da Z-API (mesmo endereço que a ponte fs-mac-bridge atendia) e /sistema (pedidos do sistema FS, com token):
+# Publica no agente (api) o webhook da Z-API (mesmo endereço que a ponte fs-mac-bridge atendia), /sistema (pedidos do sistema FS, com token)
+# e /mac/ (fila do conector do Mac, bearer MAC_BRIDGE_TOKEN; dispensa túnel SSH no Mac, 13/10/2026):
 #   https://api.fssolucoestributarias.com.br/zapi/<token>
 # Labels espelham os da ponte (lidos em 01/10/2026). Antes de parar a ponte: ZAPI_WEBHOOK_TOKEN do .env igual ao WEBHOOK_TOKEN dela.
 services:
@@ -17,9 +18,9 @@ services:
       - traefik.http.middlewares.fsagent-redir.redirectscheme.scheme=https
       - traefik.http.routers.fsagent-http.entrypoints=http
       - traefik.http.routers.fsagent-http.middlewares=fsagent-redir
-      - traefik.http.routers.fsagent-http.rule=Host(`api.fssolucoestributarias.com.br`) && (PathPrefix(`/zapi`) || PathPrefix(`/webhooks/zapi`) || PathPrefix(`/sistema`))
+      - traefik.http.routers.fsagent-http.rule=Host(`api.fssolucoestributarias.com.br`) && (PathPrefix(`/zapi`) || PathPrefix(`/webhooks/zapi`) || PathPrefix(`/sistema`) || PathPrefix(`/mac/`))
       - traefik.http.routers.fsagent.entrypoints=https
-      - traefik.http.routers.fsagent.rule=Host(`api.fssolucoestributarias.com.br`) && (PathPrefix(`/zapi`) || PathPrefix(`/webhooks/zapi`) || PathPrefix(`/sistema`))
+      - traefik.http.routers.fsagent.rule=Host(`api.fssolucoestributarias.com.br`) && (PathPrefix(`/zapi`) || PathPrefix(`/webhooks/zapi`) || PathPrefix(`/sistema`) || PathPrefix(`/mac/`))
       - traefik.http.routers.fsagent.tls=true
       - traefik.http.routers.fsagent.tls.certresolver=letsencrypt
       - traefik.http.services.fsagent.loadbalancer.server.port=3000
