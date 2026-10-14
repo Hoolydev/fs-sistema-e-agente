@@ -29,9 +29,13 @@ export async function offerSerpro(deps: FallbackDeps, job: MacJob, reason: strin
 export async function offerSerproFallback(config: AppConfig, queue: MacJobQueue, pending: PendingRequestStore, whatsapp: WhatsAppGateway, logger: AppLogger, now = Date.now()) {
   const deps = { config, queue, pending, whatsapp, logger };
   let offered = 0;
+  const seen = await queue.lastSeen();
+  const macOffline = config.MAC_OFFLINE_AFTER_MS > 0 && (seen === undefined || now - seen >= config.MAC_OFFLINE_AFTER_MS);
   for (const job of await queue.list()) {
     if (job.fallbackOfferedAt) continue;
-    if (job.state === "pending" && config.MAC_FALLBACK_AFTER_MS && now - Date.parse(job.createdAt) >= config.MAC_FALLBACK_AFTER_MS) {
+    if (job.state === "pending" && macOffline && now - Date.parse(job.createdAt) >= config.MAC_OFFLINE_AFTER_MS) {
+      if (await offerSerpro(deps, job, `está na fila, mas o Mac da FS está desligado ou sem conexão há mais de ${Math.round(config.MAC_OFFLINE_AFTER_MS / 60_000)} min`, now)) offered += 1;
+    } else if (job.state === "pending" && config.MAC_FALLBACK_AFTER_MS && now - Date.parse(job.createdAt) >= config.MAC_FALLBACK_AFTER_MS) {
       if (await offerSerpro(deps, job, `está há mais de ${Math.round(config.MAC_FALLBACK_AFTER_MS / 3_600_000)} h aguardando o Mac da FS`, now)) offered += 1;
     } else if (job.state === "inflight" && config.MAC_STALL_AFTER_MS && now - Date.parse(job.statusAt ?? job.leasedAt ?? job.createdAt) >= config.MAC_STALL_AFTER_MS) {
       if (await offerSerpro(deps, job, `está parado no Mac da FS há mais de ${Math.round(config.MAC_STALL_AFTER_MS / 60_000)} min sem avançar`, now)) offered += 1;

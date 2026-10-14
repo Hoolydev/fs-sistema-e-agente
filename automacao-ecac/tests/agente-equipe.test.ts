@@ -165,6 +165,16 @@ describe("Serpro quando a análise trava no Mac", () => {
     expect(whatsapp.texts.at(-1)![1]).toContain("continua aguardando o Mac"); expect((await macQueue.get("t2"))?.state).toBe("inflight");
     await app.close();
   });
+  it("Mac desligado: pedido na fila recebe oferta depois de 10 min; com o Mac ativo, espera", async () => {
+    const { whatsapp, macQueue, pending } = build();
+    const job = await macQueue.create({ cnpj: "51646813000194", razao: "RBE", requesterPhone: fernando.phone, requesterName: "Fernando", operation: "analisar" }, "t4");
+    const t0 = Date.parse(job.createdAt);
+    expect(await offerSerproFallback(config, macQueue, pending, whatsapp, createLogger("silent"), t0 + 5 * 60_000)).toBe(0);
+    macQueue.seenAt = t0 + 9 * 60_000;
+    expect(await offerSerproFallback(config, macQueue, pending, whatsapp, createLogger("silent"), t0 + 11 * 60_000)).toBe(0);
+    expect(await offerSerproFallback(config, macQueue, pending, whatsapp, createLogger("silent"), t0 + 20 * 60_000)).toBe(1);
+    expect(whatsapp.texts.at(-1)![1]).toContain("desligado ou sem conexão");
+  });
   it("pedido com o Mac sem etapa nova além do limite recebe oferta; pedido entregue nunca vira Serpro", async () => {
     const { service, whatsapp, macQueue, pending, publisher } = build();
     await macQueue.create({ cnpj: "51646813000194", razao: "RBE", requesterPhone: fernando.phone, requesterName: "Fernando", operation: "analisar" }, "t3");

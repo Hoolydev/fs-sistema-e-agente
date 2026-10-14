@@ -11,6 +11,8 @@ export interface MacJobQueue {
   list(): Promise<MacJob[]>;
   // Próximo pedido pendente, reservado para o Mac; reserva vencida volta a ficar disponível.
   claim(now?: number): Promise<MacJob | undefined>;
+  // Última vez que o conector do Mac pediu trabalho (ms); undefined se nunca. Serve para saber se o Mac está ligado.
+  lastSeen(): Promise<number | undefined>;
 }
 export class InMemoryMacJobQueue implements MacJobQueue {
   readonly jobs = new Map<string, MacJob>();
@@ -24,7 +26,9 @@ export class InMemoryMacJobQueue implements MacJobQueue {
   async get(id: string) { return this.jobs.get(id); }
   async save(job: MacJob) { this.jobs.set(job.id, job); }
   async list() { return [...this.jobs.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt)); }
-  async claim(now = Date.now()) { return claimFrom(await this.list(), now, (job) => this.save(job)); }
+  seenAt?: number;
+  async claim(now = Date.now()) { this.seenAt = now; return claimFrom(await this.list(), now, (job) => this.save(job)); }
+  async lastSeen() { return this.seenAt; }
 }
 async function claimFrom(jobs: MacJob[], now: number, save: (job: MacJob) => Promise<void>): Promise<MacJob | undefined> {
   const inflight = jobs.find((j) => j.state === "inflight");
@@ -54,7 +58,9 @@ export class RedisMacJobQueue implements MacJobQueue {
     const jobs = (await Promise.all(ids.map((id) => this.get(id)))).filter((j): j is MacJob => !!j);
     return jobs.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }
+  async lastSeen() { const raw = await this.redis.get("mac:last-seen"); return raw ? Number(raw) : undefined; }
   async claim(now = Date.now()) {
+    await this.redis.set("mac:last-seen", String(now), "EX", 7 * 24 * 3600);
     // Lock curto evita que dois ciclos de pull reservem o mesmo pedido.
     const lock = await this.redis.set("mac:claim-lock", "1", "PX", 5000, "NX");
     if (lock !== "OK") return undefined;
