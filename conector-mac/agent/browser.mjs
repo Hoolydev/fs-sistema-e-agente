@@ -178,24 +178,35 @@ export async function trocarPerfilProcuradorPJ(page, cnpj) {
  * downstream refazem SSO próprio e voltam ao TITULAR por padrão; sem esta
  * confirmação, a Situação Fiscal sai da FS, não da empresa pedida.
  */
-export async function aquecerServicosRFB(ctx, cnpj, { timeoutMs = 90_000 } = {}) {
+export async function aquecerServicosRFB(ctx, cnpj, { timeoutMs = 120_000 } = {}) {
   const p = await ctx.newPage()
   try {
     await p.goto(SERVICOS_SF, { waitUntil: 'domcontentloaded' })
     await p.waitForTimeout(4000)
-    if (/\/login\//.test(p.url())) {
-      const b = p.locator('button:has-text("GovBR"), a:has-text("GovBR"), button:has-text("gov.br"), a:has-text("gov.br")').first()
-      if (await b.count()) {
-        await b.click().catch(() => {})
-        await p.waitForURL((u) => !/\/login\//.test(u.toString()), { timeout: 60_000 }).catch(() => {})
-        await p.waitForTimeout(5000)
-      }
+    // O portal pode pedir de novo o login do gov.br (sessão SSO não lembrada, como num Mac novo).
+    // Passa pelas duas telas: "Entrar com GovBR" no portal e "Seu certificado digital" no gov.br;
+    // o Chaveiro resolve o certificado. Cada botão é clicado no máximo a cada 20 s para não abrir
+    // vários seletores de certificado.
+    const ultimoClique = { portal: 0, govbr: 0 }
+    const clicar = async (etapa, locator) => {
+      if (Date.now() - ultimoClique[etapa] < 20_000 || !(await locator.count())) return false
+      ultimoClique[etapa] = Date.now()
+      await locator.click().catch(() => {})
+      log(`servicos.receitafederal: ${etapa === 'portal' ? 'Entrar com GovBR' : 'certificado digital no gov.br'}`)
+      await p.waitForTimeout(4000)
+      return true
     }
     const limite = Date.now() + timeoutMs
     while (Date.now() < limite) {
+      const u = p.url()
       const t = await p.locator('body').innerText().catch(() => '')
       if (t.replace(/\D/g, '').includes(cnpj) && /procurador/i.test(t)) return true
-      if (/\/login\//.test(p.url()) && /hcaptcha|sou humano/i.test(t)) throw new Error('captcha no servicos.receitafederal')
+      if (/hcaptcha|sou humano|verifique que voc/i.test(t)) throw new Error('captcha no servicos.receitafederal')
+      if (/acesso\.gov\.br/.test(u)) {
+        await clicar('govbr', p.locator('#login-certificate, a:has-text("Seu certificado digital"), button:has-text("Seu certificado digital"), a:has-text("Certificado digital"), button:has-text("Certificado digital")').first())
+      } else if (/servicos\.receitafederal\.gov\.br\/login/.test(u)) {
+        await clicar('portal', p.locator('button:has-text("GovBR"), a:has-text("GovBR"), button:has-text("gov.br"), a:has-text("gov.br")').or(p.getByText(/Entrar com (o )?gov\.?br/i)).first())
+      }
       await p.waitForTimeout(3000)
     }
     throw new Error('servicos.receitafederal não confirmou o perfil do CNPJ pedido')
