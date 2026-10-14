@@ -33,6 +33,8 @@ const configSchema = z.object({
   MAC_BRIDGE_TOKEN: z.string().default(""),
   // Pedido parado sem o Mac por este tempo: o agente oferece a consulta preliminar pelo Serpro (cobrada). 0 desativa.
   MAC_FALLBACK_AFTER_MS: z.coerce.number().int().nonnegative().default(2 * 60 * 60 * 1000),
+  // Pedido já com o Mac sem nenhuma etapa nova por este tempo: oferece o Serpro (0 desliga).
+  MAC_STALL_AFTER_MS: z.coerce.number().int().nonnegative().default(20 * 60 * 1000),
   NOTIFICATIONS_POLL_MS: z.coerce.number().int().positive().default(60_000),
   TEAM_CACHE_MS: z.coerce.number().int().positive().default(60_000),
   MEDIA_MAX_BYTES: z.coerce.number().int().positive().default(3 * 1024 * 1024),

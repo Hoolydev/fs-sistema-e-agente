@@ -34,7 +34,7 @@ async function claimFrom(jobs: MacJob[], now: number, save: (job: MacJob) => Pro
   }
   const next = jobs.filter((j) => j.state === "pending").sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
   if (!next) return undefined;
-  next.state = "inflight"; next.leasedAt = new Date(now).toISOString(); next.status = "aguardando_mac"; await save(next);
+  next.state = "inflight"; next.leasedAt = next.statusAt = new Date(now).toISOString(); next.status = "aguardando_mac"; await save(next);
   return next;
 }
 export class RedisMacJobQueue implements MacJobQueue {

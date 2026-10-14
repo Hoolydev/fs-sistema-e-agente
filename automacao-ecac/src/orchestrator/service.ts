@@ -9,6 +9,7 @@ import type { MacJobQueue } from "../mac/queue.js";
 import type { RequestPublisher } from "../queue/request-queue.js";
 import type { WhatsAppGateway } from "../whatsapp/client.js";
 import { acceptedMedia, downloadMedia, MediaError } from "../whatsapp/media.js";
+import { serproEligible } from "../mac/fallback.js";
 import { describeMissingFields, isValidCnpj, parseRequest } from "./parser.js";
 import type { PendingRequestStore } from "./pending-request-store.js";
 
@@ -81,7 +82,8 @@ export class OrchestratorService {
     if (answer === "yes") { await this.confirm(caller, message, pending); return; }
     if (answer === "no") {
       await this.pendingRequests.clear(phone);
-      await this.whatsapp.sendText(phone, pending?.kind === "serpro-fallback" ? "Certo, o pedido continua aguardando o Mac." : "Solicitação cancelada. Você pode enviar uma nova quando quiser.");
+      const macJob = pending?.kind === "serpro-fallback" ? await this.macQueue?.get(pending.macJobId) : undefined;
+      await this.whatsapp.sendText(phone, pending?.kind !== "serpro-fallback" ? "Solicitação cancelada. Você pode enviar uma nova quando quiser." : macJob?.state === "done" ? "Certo, nenhuma consulta Serpro foi feita. A equipe vai revisar o pedido no Mac." : "Certo, o pedido continua aguardando o Mac.");
       return;
     }
     const parsed = parseRequest(text);
@@ -106,7 +108,7 @@ export class OrchestratorService {
     await this.pendingRequests.clear(phone);
     if (pending.kind === "serpro-fallback") {
       const job = await this.macQueue?.get(pending.macJobId);
-      if (!job || job.state !== "pending") { await this.whatsapp.sendText(phone, "Esse pedido já foi atendido ou cancelado; nenhuma consulta Serpro foi iniciada."); return; }
+      if (!job || !serproEligible(job)) { await this.whatsapp.sendText(phone, "Esse pedido já foi atendido ou cancelado; nenhuma consulta Serpro foi iniciada."); return; }
       job.state = "cancelled"; job.status = "cancelado"; job.note = "Substituído pela consulta Serpro a pedido do solicitante."; await this.macQueue!.save(job);
       const request = await this.queue.publish(message, pending.parsed);
       await this.whatsapp.sendText(phone, `Consulta preliminar pelo Serpro iniciada (cobrada). Protocolo ${request.requestId}. Aviso quando o parecer estiver pronto.`);

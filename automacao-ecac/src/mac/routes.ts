@@ -11,11 +11,13 @@ import type { Platform } from "../system/platform.js";
 import type { WhatsAppGateway } from "../whatsapp/client.js";
 import { formatCnpj } from "../orchestrator/service.js";
 import type { MacJobQueue } from "./queue.js";
+import type { PendingRequestStore } from "../orchestrator/pending-request-store.js";
+import { MAC_STUCK_STATUSES, offerSerpro } from "./fallback.js";
 
 // Endpoints privados do conector do Mac (mesmos caminhos da antiga ponte): o Mac busca pedidos, relata etapas e devolve o parecer.
-// Alcançados só pelo túnel SSH do Mac para 127.0.0.1:3000; nunca pelo Traefik.
+// Publicados em https://api.fssolucoestributarias.com.br/mac/ (Traefik), protegidos pelo bearer MAC_BRIDGE_TOKEN.
 export interface MacArchive { archivePdf(job: MacJob, content: Buffer, filename: string): Promise<void> }
-export interface MacRouteDependencies { config: AppConfig; logger: AppLogger; queue: MacJobQueue; whatsapp: WhatsAppGateway; platform?: Platform; archive?: MacArchive }
+export interface MacRouteDependencies { config: AppConfig; logger: AppLogger; queue: MacJobQueue; whatsapp: WhatsAppGateway; platform?: Platform; archive?: MacArchive; pending?: PendingRequestStore }
 const statusBody = z.object({ status: z.string().max(40), note: z.string().max(500).optional(), state: z.string().max(20).optional() });
 const resultBody = z.object({ pdfBase64: z.string().min(100), filename: z.string().max(160).optional(), razao: z.string().max(200).optional(), sha256: z.string().max(64).optional(), note: z.string().max(500).optional(), coletaEm: z.string().max(40).optional() });
 export const statusMessages: Record<string, string> = {
@@ -48,7 +50,7 @@ export async function registerMacRoutes(app: FastifyInstance, deps: MacRouteDepe
     if (!job) return reply.code(404).send({ error: "not_found" });
     const body = statusBody.safeParse(request.body);
     if (!body.success) return reply.code(400).send({ error: "invalid_status" });
-    job.status = body.data.status; job.note = body.data.note ?? job.note;
+    job.status = body.data.status; job.note = body.data.note ?? job.note; job.statusAt = new Date().toISOString();
     if (body.data.status === "enviado") { job.state = "done"; job.deliveredAt ??= new Date().toISOString(); }
     else if (["falhou", "coleta_incompleta", "aguardando_permissao"].includes(body.data.status)) job.state = "done";
     await queue.save(job);
@@ -57,6 +59,10 @@ export async function registerMacRoutes(app: FastifyInstance, deps: MacRouteDepe
     if (message && job.notifiedStatus !== body.data.status) {
       job.notifiedStatus = body.data.status; await queue.save(job);
       await whatsapp.sendText(job.requesterPhone, `Pedido ${job.id} (${job.razao || formatCnpj(job.cnpj)}): ${message}`).catch((error: unknown) => logger.warn({ err: error, jobId: job.id }, "mac status notice failed"));
+    }
+    // Travou no Mac: oferece na hora a consulta pelo Serpro (uma vez por pedido, só com SIM).
+    if (deps.pending && MAC_STUCK_STATUSES.includes(body.data.status)) {
+      await offerSerpro({ config, queue, pending: deps.pending, whatsapp, logger }, job, body.data.status === "aguardando_login" ? "travou no login do e-CAC no Mac da FS" : body.data.status === "aguardando_permissao" ? "não pode ser feito no Mac (empresa não autorizada no conector)" : "não foi concluído no Mac da FS");
     }
     return { ok: true };
   });

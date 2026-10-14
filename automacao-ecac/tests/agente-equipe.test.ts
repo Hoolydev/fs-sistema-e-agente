@@ -137,6 +137,46 @@ describe("fila do Mac e reserva Serpro", () => {
     await app.close();
   });
 });
+describe("Serpro quando a análise trava no Mac", () => {
+  it("etapa de falha do Mac oferece o Serpro na hora; SIM cancela o Mac e publica; repetir a etapa não oferece de novo", async () => {
+    const { service, whatsapp, macQueue, pending, publisher, platform } = build();
+    const app = await buildApp({ config, logger: createLogger("silent"), orchestrator: { handle: async () => {} }, mac: { queue: macQueue, whatsapp, platform, pending } });
+    await macQueue.create({ cnpj: "51646813000194", razao: "RBE", requesterPhone: fernando.phone, requesterName: "Fernando", operation: "analisar" }, "t1");
+    const auth = { authorization: "Bearer mac-token" };
+    await app.inject({ method: "POST", url: "/mac/claim", headers: auth });
+    await app.inject({ method: "POST", url: "/mac/jobs/t1/status", headers: auth, payload: { status: "coleta_incompleta", note: "perfil" } });
+    await app.inject({ method: "POST", url: "/mac/jobs/t1/status", headers: auth, payload: { status: "falhou" } });
+    const offers = whatsapp.texts.filter(([, b]) => b.includes("Posso fazer a consulta pelo Serpro"));
+    expect(offers).toHaveLength(1); expect(offers[0]![1]).toContain("não foi concluído no Mac"); expect(offers[0]![1]).toContain("NÃO para deixar com a equipe");
+    expect((await pending.get(fernando.phone))?.kind).toBe("serpro-fallback");
+    await service.handle(text(fernando.phone, "sim"));
+    expect((await macQueue.get("t1"))?.state).toBe("cancelled"); expect(publisher.requests).toHaveLength(1); expect(whatsapp.texts.at(-1)![1]).toContain("Serpro iniciada");
+    await app.close();
+  });
+  it("login travado no Mac oferece o Serpro e NÃO mantém o pedido com o Mac", async () => {
+    const { service, whatsapp, macQueue, pending, platform } = build();
+    const app = await buildApp({ config, logger: createLogger("silent"), orchestrator: { handle: async () => {} }, mac: { queue: macQueue, whatsapp, platform, pending } });
+    await macQueue.create({ cnpj: "51646813000194", razao: "RBE", requesterPhone: fernando.phone, requesterName: "Fernando", operation: "analisar" }, "t2");
+    const auth = { authorization: "Bearer mac-token" };
+    await app.inject({ method: "POST", url: "/mac/claim", headers: auth });
+    await app.inject({ method: "POST", url: "/mac/jobs/t2/status", headers: auth, payload: { status: "aguardando_login" } });
+    expect(whatsapp.texts.at(-1)![1]).toContain("travou no login");
+    await service.handle(text(fernando.phone, "não"));
+    expect(whatsapp.texts.at(-1)![1]).toContain("continua aguardando o Mac"); expect((await macQueue.get("t2"))?.state).toBe("inflight");
+    await app.close();
+  });
+  it("pedido com o Mac sem etapa nova além do limite recebe oferta; pedido entregue nunca vira Serpro", async () => {
+    const { service, whatsapp, macQueue, pending, publisher } = build();
+    await macQueue.create({ cnpj: "51646813000194", razao: "RBE", requesterPhone: fernando.phone, requesterName: "Fernando", operation: "analisar" }, "t3");
+    const t0 = Date.now(), job = (await macQueue.claim(t0))!;
+    expect(await offerSerproFallback(config, macQueue, pending, whatsapp, createLogger("silent"), t0 + 5 * 60_000)).toBe(0);
+    expect(await offerSerproFallback(config, macQueue, pending, whatsapp, createLogger("silent"), t0 + 21 * 60_000)).toBe(1);
+    expect(whatsapp.texts.at(-1)![1]).toContain("parado no Mac da FS há mais de 20 min");
+    job.state = "done"; job.status = "enviado"; job.deliveredAt = new Date().toISOString(); await macQueue.save(job);
+    await service.handle(text(fernando.phone, "sim"));
+    expect(publisher.requests).toHaveLength(0); expect(whatsapp.texts.at(-1)![1]).toContain("já foi atendido");
+  });
+});
 describe("caixa de avisos", () => {
   it("entrega cada aviso e confirma; falha fica registrada sem travar os demais", async () => {
     const platform = new FakePlatform();

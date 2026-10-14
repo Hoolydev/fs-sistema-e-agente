@@ -40,6 +40,8 @@ export interface MacJob {
   deliveredAt?: string;
   notifiedStatus?: string;
   fallbackOfferedAt?: string;
+  // Última notícia do Mac sobre o pedido (reserva ou etapa); serve para detectar pedido parado.
+  statusAt?: string;
   filename?: string;
   sha256?: string;
 }

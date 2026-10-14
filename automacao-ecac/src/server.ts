@@ -45,7 +45,7 @@ const macArchive = documents ? {
 } : undefined;
 // SITFIS só com o sistema configurado e o Integra Contador ativo neste agente.
 const sitfis = systemConfigured && config.SERPRO_ENABLED ? new BullMqSitfisPublisher(redisConnectionFromUrl(config.REDIS_URL)) : undefined;
-const app = await buildApp({ config, logger, orchestrator, ...(sitfis ? { sitfis } : {}), ...(macQueue ? { mac: { queue: macQueue, whatsapp, ...(platform ? { platform } : {}), ...(macArchive ? { archive: macArchive } : {}) } } : {}) });
+const app = await buildApp({ config, logger, orchestrator, ...(sitfis ? { sitfis } : {}), ...(macQueue ? { mac: { queue: macQueue, whatsapp, pending: pendingRequests, ...(platform ? { platform } : {}), ...(macArchive ? { archive: macArchive } : {}) } } : {}) });
 const stopPoller = platform ? startNotificationPoller(platform, whatsapp, logger, config.NOTIFICATIONS_POLL_MS) : undefined;
 const stopFallback = macQueue ? startFallbackWatch(config, macQueue, pendingRequests, whatsapp, logger) : undefined;
 
