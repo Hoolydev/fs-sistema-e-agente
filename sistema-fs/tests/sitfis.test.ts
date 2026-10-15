@@ -88,3 +88,15 @@ test('relatório fora do layout vai para revisão com o PDF guardado; recusa da 
   const denied = await completeSitfis({ requestId: req2.id, cnpj, ok: false, code: 'access_denied' });
   assert.equal(denied.status, 'falhou'); assert.match(denied.message, /procuração eletrônica/);
 });
+
+test('empresa sem procuração: o pedido vai ao agente com a empresa como autora (certificado do cofre)', async () => {
+  const base = await runPreliminaryDiagnostic(cnpj, 'u1', { env, fetchImpl: serpro, force: true, now: () => new Date(Date.now() + 5000) });
+  const bodies: string[] = [];
+  const agent = (async (_url: string, init?: RequestInit) => { bodies.push(String(init?.body)); return new Response('{}', { status: 202 }); }) as unknown as typeof fetch;
+  await requestSitfis({ baseDocumentId: base.id, cnpj, actor, ownerId: null, force: true, autor: 'contribuinte' }, env, agent);
+  assert.equal(JSON.parse(bodies[0]!).autor, 'contribuinte');
+  const req = await requestSitfis({ baseDocumentId: base.id, cnpj, actor, ownerId: null, force: true }, env, agent);
+  assert.equal(JSON.parse(bodies[1]!).autor, undefined);
+  const failed = await completeSitfis({ requestId: req.id, cnpj, ok: false, code: 'certificate_not_found' });
+  assert.match(failed.message, /certificado válido da empresa no cofre/);
+});

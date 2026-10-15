@@ -108,11 +108,13 @@ export class SerproSitfisClient {
     private readonly now: () => number = Date.now,
   ) {}
 
-  async obtainSituationPdf(cnpj: string): Promise<Buffer> {
+  // autor: consulta feita com a própria empresa como autora do pedido (certificado do cliente + termo assinado),
+  // sem procuração à FS. Sem autor, a FS é a autora (exige procuração da empresa no e-CAC).
+  async obtainSituationPdf(cnpj: string, autor?: { cnpj: string; token: string }): Promise<Buffer> {
     assertSerproConfiguration(this.config);
     if (!isValidCnpj(cnpj)) throw new SerproError("invalid_cnpj", "CNPJ do contribuinte inválido.");
     // Apoiar is issued once. Ambiguous network failures never trigger a new paid collection.
-    const initial = await this.call("Apoiar", "SOLICITARPROTOCOLO91", cnpj, "");
+    const initial = await this.call("Apoiar", "SOLICITARPROTOCOLO91", cnpj, "", undefined, autor);
     if (initial.status !== 200) throw statusError(initial.status);
     const data = dataRecord(initial.body.dados);
     if (typeof data.protocoloRelatorio !== "string" || !data.protocoloRelatorio.trim()) {
@@ -130,7 +132,7 @@ export class SerproSitfisClient {
       const remaining = deadline - this.now();
       if (remaining <= 0) break;
       const response = await this.call("Emitir", "RELATORIOSITFIS92", cnpj,
-        JSON.stringify({ protocoloRelatorio: data.protocoloRelatorio }), remaining);
+        JSON.stringify({ protocoloRelatorio: data.protocoloRelatorio }), remaining, autor);
       if (response.status !== 200 && response.status !== 202) throw statusError(response.status);
       const emitted = dataRecord(response.body.dados);
       if (response.status === 200) return decodeSerproPdf(emitted.pdf);
@@ -172,15 +174,44 @@ export class SerproSitfisClient {
     } finally { certificate.pfx.fill(0); }
   }
 
-  private async call(endpoint: "Apoiar" | "Emitir", service: string, cnpj: string, dados: string,
-    remainingMs = this.config.SERPRO_REQUEST_TIMEOUT_MS): Promise<{ status: number; body: Record<string, unknown> }> {
+  // Envia o Termo de Autorização assinado com o certificado da empresa (AUTENTICAPROCURADOR) e devolve o token que
+  // acompanha as consultas em que a empresa é a autora do pedido. 304: já existe token válido emitido antes.
+  async authorizeClient(cnpj: string, signedTermoBase64: string): Promise<{ token: string; expiresAt: number } | "cached"> {
+    assertSerproConfiguration(this.config);
+    if (!isValidCnpj(cnpj)) throw new SerproError("invalid_cnpj", "CNPJ do contribuinte inválido.");
     await this.authenticate();
     const response = await this.transport({
-      url: `${API_URL}/${endpoint}`,
+      url: `${API_URL}/Apoiar`,
       headers: { authorization: `Bearer ${this.tokens!.access}`, jwt_token: this.tokens!.jwt, "content-type": "application/json" },
       body: JSON.stringify({
         contratante: { numero: this.config.SERPRO_CONTRACTOR_CNPJ, tipo: 2 },
-        autorPedidoDados: { numero: this.config.SERPRO_AUTHOR_CNPJ, tipo: 2 },
+        autorPedidoDados: { numero: cnpj, tipo: 2 },
+        contribuinte: { numero: cnpj, tipo: 2 },
+        pedidoDados: { idSistema: "AUTENTICAPROCURADOR", idServico: "ENVIOXMLASSINADO81", versaoSistema: "1.0", dados: JSON.stringify({ xml: signedTermoBase64 }) },
+      }),
+      timeoutMs: this.config.SERPRO_REQUEST_TIMEOUT_MS,
+    });
+    if (response.status === 304) return "cached";
+    if (response.status === 401 || response.status === 403) throw new SerproError("client_authorization_denied", "O Serpro recusou o termo de autorização assinado com o certificado da empresa.");
+    if (response.status !== 200) throw statusError(response.status);
+    const body = record(response.body);
+    if (body.status === 304) return "cached";
+    if (body.status !== 200) throw new SerproError("client_authorization_denied", "O Serpro recusou o termo de autorização assinado com o certificado da empresa.");
+    const data = dataRecord(body.dados);
+    const token = data.autenticar_procurador_token, expires = Date.parse(String(data.data_hora_expiracao ?? ""));
+    if (typeof token !== "string" || !token) throw new SerproError("response_format", "O Serpro não devolveu o token de autorização.");
+    return { token, expiresAt: Number.isFinite(expires) ? expires : this.now() + 3_600_000 };
+  }
+
+  private async call(endpoint: "Apoiar" | "Emitir", service: string, cnpj: string, dados: string,
+    remainingMs = this.config.SERPRO_REQUEST_TIMEOUT_MS, autor?: { cnpj: string; token: string }): Promise<{ status: number; body: Record<string, unknown> }> {
+    await this.authenticate();
+    const response = await this.transport({
+      url: `${API_URL}/${endpoint}`,
+      headers: { authorization: `Bearer ${this.tokens!.access}`, jwt_token: this.tokens!.jwt, "content-type": "application/json", ...(autor ? { autenticar_procurador_token: autor.token } : {}) },
+      body: JSON.stringify({
+        contratante: { numero: this.config.SERPRO_CONTRACTOR_CNPJ, tipo: 2 },
+        autorPedidoDados: { numero: autor?.cnpj ?? this.config.SERPRO_AUTHOR_CNPJ, tipo: 2 },
         contribuinte: { numero: cnpj, tipo: 2 },
         pedidoDados: { idSistema: "SITFIS", idServico: service, versaoSistema: "2.0", dados },
       }),

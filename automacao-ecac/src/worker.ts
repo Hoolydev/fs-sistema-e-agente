@@ -25,7 +25,9 @@ import {
   type DocumentStore,
 } from "./storage/document-store.js";
 import { createWhatsAppGateway } from "./whatsapp/client.js";
-import { processSitfisJob, SITFIS_QUEUE, type SitfisJob } from "./sistema/sitfis.js";
+import { clientToken, processSitfisJob, RedisClientTokenStore, SITFIS_QUEUE, type SitfisJob } from "./sistema/sitfis.js";
+import { signedTermoBase64 } from "./serpro/procurador.js";
+import { Redis } from "ioredis";
 import { assertPdfTaxpayer } from "./serpro/automation.js";
 import { describePdf } from "./rpa/federal-debt-flow.js";
 
@@ -135,19 +137,33 @@ const worker = new Worker<RpaRequest, { status: string; storageKey?: string }>(
   },
 );
 
+// Certificados dos clientes (cofre do sistema) e tokens do termo de autorização assinado por eles.
+const clientCertificates = new VaultCertificateProvider(config);
+const clientTokens = new RedisClientTokenStore(new Redis(redisConnectionFromUrl(config.REDIS_URL)));
 // Situação Fiscal para o sistema FS: uma consulta por pedido, resultado entregue em /api/agent/sitfis.
 const sitfisWorker = config.SERPRO_ENABLED && config.FS_SYSTEM_URL && config.FS_SYSTEM_API_TOKEN ? new Worker<SitfisJob>(SITFIS_QUEUE, async (job) => {
   if (job.data.started) throw new UnrecoverableError("Pedido SITFIS já iniciado; revisar antes de repetir.");
   await job.updateData({ ...job.data, started: true });
   const client = new SerproSitfisClient(config, certificateProvider);
   const result = await processSitfisJob(job.data, {
-    obtainPdf: cnpj => { assertSerproConfiguration(config); return client.obtainSituationPdf(cnpj); },
+    obtainPdf: async cnpj => {
+      assertSerproConfiguration(config);
+      if (job.data.autor !== "contribuinte") return client.obtainSituationPdf(cnpj);
+      // Sem procuração: certificado da empresa (cofre do sistema) assina o termo; a empresa é a autora do pedido.
+      const token = await clientToken(cnpj, {
+        store: clientTokens,
+        certificate: c => clientCertificates.getForCnpj(c, "SITFIS com o certificado da empresa"),
+        sign: (material, c) => signedTermoBase64(material, { cnpj: config.SERPRO_CONTRACTOR_CNPJ, nome: config.SERPRO_CONTRACTOR_NAME }, c),
+        authorize: (c, termo) => client.authorizeClient(c, termo),
+      });
+      return client.obtainSituationPdf(cnpj, { cnpj, token });
+    },
     extractText: async (path, cnpj) => { const source = await describePdf("situacao_fiscal_rfb", "Situação Fiscal RFB — SITFIS", path); assertPdfTaxpayer(source.text, cnpj); return source.text; },
     post: body => fetch(`${config.FS_SYSTEM_URL.replace(/\/$/, "")}/api/agent/sitfis`, { method: "POST", headers: { authorization: `Bearer ${config.FS_SYSTEM_API_TOKEN}` }, body, signal: AbortSignal.timeout(60_000) }),
     dataDir: join(config.LOCAL_DOCUMENT_DIR, "..", "sitfis"),
-    errorCode: error => error instanceof SerproError ? error.code : "processing_failed",
+    errorCode: error => error instanceof SerproError ? error.code : error instanceof Error && /^[a-z_]{3,40}$/.test(error.message) ? error.message : "processing_failed",
   });
-  logger.info({ requestId: job.data.requestId, status: result.status, code: result.code }, "sitfis job finished");
+  logger.info({ requestId: job.data.requestId, status: result.status, code: result.code, autor: job.data.autor ?? "fs" }, "sitfis job finished");
   return result;
 }, { connection: redisConnectionFromUrl(config.REDIS_URL), concurrency: 1, lockDuration: config.SERPRO_POLL_TIMEOUT_MS + 5 * 60_000 }) : undefined;
 sitfisWorker?.on("failed", (job, error) => logger.error({ requestId: job?.data.requestId, err: error }, "sitfis job failed"));

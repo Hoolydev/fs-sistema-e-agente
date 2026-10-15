@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { formatCnpj } from "@/lib/diagnostico/model";
 import type { StoredCertificate } from "@/lib/certificados/store";
 
-type State = { certificates: StoredCertificate[]; audit: { actor: string; action: string; detail: string; createdAt: string }[]; canManage: boolean; vaultReady: boolean };
+type State = { certificates: StoredCertificate[]; audit: { actor: string; action: string; detail: string; createdAt: string }[]; canManage: boolean; canUpload: boolean; vaultReady: boolean };
 const day = (iso: string) => new Date(iso).toLocaleDateString("pt-BR");
 const actions: Record<string, string> = { enviado: "Enviado", substituido: "Substituído", revogado: "Revogado", entregue_ao_agente: "Usado pelo agente" };
 
@@ -70,7 +70,7 @@ export function CompanyCertificate({ cnpj }: { cnpj: string }) {
           {state.canManage && <Button variant="outline" size="sm" disabled={busy} onClick={() => void revoke(active.id)}><ShieldOff size={14} /> Revogar</Button>}
         </div>
       ) : <p className="muted">Nenhum certificado guardado para esta empresa.</p>}
-      {state.canManage && (adding ? (
+      {state.canUpload && (adding ? (
         <form ref={form} className="cert-form" onSubmit={upload} autoComplete="off">
           <p className="cert-hint"><KeyRound size={14} /> O arquivo e a senha são conferidos e guardados cifrados; só o agente da FS consegue abri-los. Tenha o termo do cliente autorizando a FS a guardar e usar o certificado.</p>
           <div className="form-field"><Label htmlFor={`cert-file-${cnpj}`}>Certificado A1 (.pfx ou .p12)</Label><Input id={`cert-file-${cnpj}`} name="file" type="file" accept=".pfx,.p12,application/x-pkcs12" required disabled={busy} /></div>

@@ -31,13 +31,14 @@ export async function GET(request: Request) {
   const { actor, denied } = await requirePermission(request, { interno: ["acessar"] }); if (denied) return denied;
   const cnpj = normalizeCnpj(new URL(request.url).searchParams.get("cnpj") ?? "");
   if (!isValidCnpj(cnpj)) return reply({ message: "CNPJ inválido." }, 400);
-  const manage = can(actor.role, { user: ["update"] });
-  try { return reply({ certificates: await listCertificates(cnpj), audit: manage ? await certificateAudit(cnpj) : [], canManage: manage, vaultReady: !!process.env.FS_CERT_VAULT_PUBLIC_KEY }); }
+  const manage = can(actor.role, { user: ["update"] }), upload = can(actor.role, { processo: ["incluir"], interno: ["acessar"] });
+  try { return reply({ certificates: await listCertificates(cnpj), audit: manage ? await certificateAudit(cnpj) : [], canManage: manage, canUpload: upload, vaultReady: !!process.env.FS_CERT_VAULT_PUBLIC_KEY }); }
   catch (error) { return failure(error); }
 }
-// Envio do certificado A1 com a senha: só administrador. A senha não é gravada em claro nem registrada em log.
+// Envio do certificado A1 com a senha: equipe interna que inclui registros (é o que permite analisar com o certificado
+// na primeira etapa). A senha não é gravada em claro nem registrada em log. Revogar continua só com o administrador.
 export async function POST(request: Request) {
-  const { actor, denied } = await requirePermission(request, { user: ["update"] }); if (denied) return denied;
+  const { actor, denied } = await requirePermission(request, { processo: ["incluir"], interno: ["acessar"] }); if (denied) return denied;
   if (!sameOrigin(request)) return reply({ message: "Origem inválida." }, 403);
   if (Number(request.headers.get("content-length") ?? 0) > MAX_PFX_BYTES + 8192) return failure(new Error("FILE_INVALID"));
   let form: FormData;

@@ -1,13 +1,16 @@
 "use client";
-import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { Plus, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { KeyRound, Plus, ShieldCheck, X } from "lucide-react";
 import { CompanyDocuments, type CompanyDoc } from "@/components/empresas/company-documents";
 import { documentTypeLabel } from "@/lib/documentos/tipos";
 
 // Complemento da análise: leitura da Receita Federal sem procuração e documentos anexados ao parecer.
 export type DebtLine = { description: string; period: string; value: string };
-export type Complement = { sitfis: boolean; rfb: { enabled: boolean; hasDebts: boolean; reference: string; note: string; total: string; count: string; lines: DebtLine[] }; annexIds: string[] };
-export const emptyComplement = (): Complement => ({ sitfis: false, rfb: { enabled: false, hasDebts: true, reference: "", note: "", total: "", count: "", lines: [] }, annexIds: [] });
+// certificate: empresa sem procuração, com o e-CNPJ A1 dela. O arquivo e a senha vão para o cofre antes da análise;
+// "stored" indica que já há um certificado válido guardado, que pode ser usado sem novo envio.
+export type CertificateChoice = { enabled: boolean; file: File | null; password: string; stored: { holder: string; notAfter: string } | null };
+export type Complement = { sitfis: boolean; certificate: CertificateChoice; rfb: { enabled: boolean; hasDebts: boolean; reference: string; note: string; total: string; count: string; lines: DebtLine[] }; annexIds: string[] };
+export const emptyComplement = (): Complement => ({ sitfis: false, certificate: { enabled: false, file: null, password: "", stored: null }, rfb: { enabled: false, hasDebts: true, reference: "", note: "", total: "", count: "", lines: [] }, annexIds: [] });
 // "1.234,56" → 123456 centavos; vazio ou inválido → null.
 export function brlCents(value: string): number | null {
   const clean = value.replace(/[R$\s]/g, ""); if (!clean) return null;
@@ -20,6 +23,12 @@ export function complementPayload(c: Complement): { body: Record<string, unknown
   const body: Record<string, unknown> = { annexIds: c.annexIds };
   // Com procuração, a Receita vem do SITFIS; a leitura manual é ignorada.
   if (c.sitfis) return { body: { ...body, rfbSitfis: true } };
+  // Com o certificado da empresa: SITFIS com a empresa como autora (termo assinado pelo certificado dela).
+  if (c.certificate.enabled) {
+    if (!c.certificate.file && !c.certificate.stored) return { body, error: "Escolha o arquivo do certificado A1 (.pfx ou .p12) da empresa." };
+    if (c.certificate.file && !c.certificate.password) return { body, error: "Informe a senha do certificado. Todo certificado A1 (.pfx) tem senha." };
+    return { body: { ...body, rfbCertificado: true } };
+  }
   if (!c.rfb.enabled) return { body };
   if (c.rfb.reference.trim().length < 3) return { body, error: "Informe de onde veio a leitura da Receita Federal (ex.: relatório de situação fiscal do cliente e a data)." };
   const lines = c.rfb.hasDebts ? c.rfb.lines.filter(l => l.description.trim() || l.value.trim()) : [];
@@ -36,6 +45,17 @@ export function AnalysisComplement({ cnpj, value, onChange }: { cnpj: string; va
   const [docs, setDocs] = useState<CompanyDoc[]>([]);
   const seen = useRef(new Set<string>());
   const rfb = value.rfb, setRfb = (patch: Partial<Complement["rfb"]>) => onChange({ ...value, rfb: { ...rfb, ...patch } });
+  const cert = value.certificate, setCert = (patch: Partial<CertificateChoice>) => onChange({ ...value, certificate: { ...cert, ...patch } });
+  // Certificado já guardado no cofre para este CNPJ (válido): pode ser usado sem novo envio.
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/certificados?cnpj=${cnpj}`, { cache: "no-store" }).then(r => (r.ok ? r.json() : null)).then(d => {
+      if (!active || !d) return;
+      const found = (d.certificates as { active: boolean; daysLeft: number; holder: string; notAfter: string }[] | undefined)?.find(c => c.active && c.daysLeft >= 0);
+      onChange(prev => ({ ...prev, certificate: { ...prev.certificate, stored: found ? { holder: found.holder, notAfter: found.notAfter } : null } }));
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [cnpj, onChange]);
   const setLine = (i: number, patch: Partial<DebtLine>) => setRfb({ lines: rfb.lines.map((l, j) => j === i ? { ...l, ...patch } : l) });
   // Documentos novos entram marcados como anexo; pareceres anteriores nunca são anexados.
   const onDocs = useCallback((list: CompanyDoc[]) => {
@@ -47,8 +67,17 @@ export function AnalysisComplement({ cnpj, value, onChange }: { cnpj: string; va
   return (
     <div className="diag-complement">
       <section>
-        <label className="diag-check"><input type="checkbox" checked={value.sitfis} onChange={e => onChange({ ...value, sitfis: e.target.checked })} /> <span><strong>Empresa com procuração para a FS</strong><small>Consultar a Situação Fiscal na Receita Federal pelo Serpro (consulta cobrada, feita uma vez). O preliminar sai na hora e a versão completa chega em alguns minutos.</small></span></label>
-        {!value.sitfis && <>
+        <label className="diag-check"><input type="checkbox" checked={value.sitfis} onChange={e => onChange({ ...value, sitfis: e.target.checked, certificate: { ...cert, enabled: false } })} /> <span><strong>Empresa com procuração para a FS</strong><small>Consultar a Situação Fiscal na Receita Federal pelo Serpro (consulta cobrada, feita uma vez). O preliminar sai na hora e a versão completa chega em alguns minutos.</small></span></label>
+        {!value.sitfis && <label className="diag-check"><input type="checkbox" checked={cert.enabled} onChange={e => onChange({ ...value, certificate: { ...cert, enabled: e.target.checked }, rfb: { ...rfb, enabled: false } })} /> <span><strong>Tenho o certificado digital da empresa (sem procuração)</strong><small>A empresa autoriza a FS com o próprio e-CNPJ A1 e a Situação Fiscal é consultada pelo Serpro (consulta cobrada, feita uma vez). O certificado fica guardado cifrado no cofre da FS.</small></span></label>}
+        {!value.sitfis && cert.enabled && (
+          <div className="diag-complement-body">
+            {cert.stored && !cert.file && <p className="diag-cert-stored"><ShieldCheck size={15} /> Certificado guardado: {cert.stored.holder}, válido até {new Date(cert.stored.notAfter).toLocaleDateString("pt-BR")}. Para usar outro, escolha o arquivo abaixo.</p>}
+            <label className="diag-field">Certificado A1 (.pfx ou .p12)<input type="file" accept=".pfx,.p12,application/x-pkcs12" onChange={e => setCert({ file: e.target.files?.[0] ?? null })} /></label>
+            {cert.file && <label className="diag-field">Senha do certificado<input type="password" autoComplete="new-password" maxLength={128} value={cert.password} onChange={e => setCert({ password: e.target.value })} /></label>}
+            <p className="diag-cert-hint"><KeyRound size={14} /> Todo certificado A1 tem senha. Ela é conferida ao abrir o arquivo e guardada cifrada com ele; só o agente da FS consegue usá-los. Tenha a autorização do cliente para a FS guardar e usar o certificado.</p>
+          </div>
+        )}
+        {!value.sitfis && !cert.enabled && <>
         <label className="diag-check"><input type="checkbox" checked={rfb.enabled} onChange={e => setRfb({ enabled: e.target.checked })} /> <span><strong>Receita Federal sem procuração</strong><small>Informar a leitura feita pelo analista em documento do cliente. O parecer identifica que não foi coletada pelo sistema.</small></span></label>
         {rfb.enabled && (
           <div className="diag-complement-body">

@@ -60,6 +60,8 @@ const configSchema = z.object({
   FISCAL_DATA_PROVIDER: z.enum(["rpa", "serpro"]).default("rpa"),
   SERPRO_ENABLED: booleanFromString,
   SERPRO_CONTRACTOR_CNPJ: z.string().default(""),
+  // Nome do contratante no termo de autorização assinado pelos clientes sem procuração.
+  SERPRO_CONTRACTOR_NAME: z.string().default("FS SOLUCOES TRIBUTARIAS LTDA"),
   SERPRO_AUTHOR_CNPJ: z.string().default(""),
   SERPRO_CONSUMER_KEY_FILE: z.string().default("/run/secrets/serpro_consumer_key"),
   SERPRO_CONSUMER_SECRET_FILE: z.string().default("/run/secrets/serpro_consumer_secret"),

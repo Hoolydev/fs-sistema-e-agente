@@ -39,7 +39,8 @@ export async function sitfisStatusFor(documentId: string, scope: Scope): Promise
   return row && ownedBy(scope, row.owner_id ? String(row.owner_id) : null) ? toRequest(row) : null;
 }
 // Pede a consulta ao agente. Um pedido ativo ou concluído por parecer-base: repetir exige force (nova cobrança).
-export async function requestSitfis(input: { baseDocumentId: string; cnpj: string; actor: { id: string; name: string }; ownerId: string | null; force?: boolean }, env: NodeJS.ProcessEnv = process.env, fetchImpl: typeof fetch = fetch): Promise<SitfisRequest> {
+// autor "contribuinte": empresa sem procuração; o agente usa o certificado dela guardado no cofre.
+export async function requestSitfis(input: { baseDocumentId: string; cnpj: string; actor: { id: string; name: string }; ownerId: string | null; force?: boolean; autor?: 'fs' | 'contribuinte' }, env: NodeJS.ProcessEnv = process.env, fetchImpl: typeof fetch = fetch): Promise<SitfisRequest> {
   await setupSitfis();
   const cnpj = normalizeCnpj(input.cnpj);
   const [existing] = await query("SELECT * FROM fs_sitfis_requests WHERE base_document_id=$1 AND status IN ('solicitado','concluido') ORDER BY created_at DESC LIMIT 1", [input.baseDocumentId]);
@@ -49,7 +50,7 @@ export async function requestSitfis(input: { baseDocumentId: string; cnpj: strin
   const token = env.FS_AGENT_SERVICE_TOKEN;
   if (!token) { await update(id, 'falhou', 'Integração com o agente não configurada no sistema (token ausente). Nenhuma consulta foi feita.'); return (await sitfisStatusFor(input.baseDocumentId, null))!; }
   try {
-    const response = await fetchImpl(`${(env.FS_AGENT_URL || DEFAULT_AGENT_URL).replace(/\/$/, '')}/sistema/sitfis`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ requestId: id, cnpj }), signal: AbortSignal.timeout(15_000) });
+    const response = await fetchImpl(`${(env.FS_AGENT_URL || DEFAULT_AGENT_URL).replace(/\/$/, '')}/sistema/sitfis`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ requestId: id, cnpj, ...(input.autor === 'contribuinte' ? { autor: 'contribuinte' } : {}) }), signal: AbortSignal.timeout(15_000) });
     if (response.status !== 202 && response.status !== 200) await update(id, 'falhou', `O agente não aceitou o pedido (status ${response.status}). Nenhuma consulta foi feita.`);
   } catch { await update(id, 'falhou', 'O agente da FS não respondeu. Nenhuma consulta foi feita; tente novamente mais tarde.'); }
   return (await sitfisStatusFor(input.baseDocumentId, null))!;
@@ -62,6 +63,14 @@ const failureMessages: Record<string, string> = {
   credentials_missing: 'Credenciais do Integra Contador ausentes no agente. Nenhuma consulta foi feita.',
   certificate_missing: 'Certificado da FS indisponível no agente. Nenhuma consulta foi feita.',
   not_enabled: 'Integra Contador desativado no agente. Nenhuma consulta foi feita.',
+  certificate_not_found: 'Não há certificado válido da empresa no cofre. Envie o certificado A1 com a senha e peça a análise de novo. Nenhuma consulta foi feita.',
+  vault_key_missing: 'O agente ainda não tem a chave do cofre de certificados. Nenhuma consulta foi feita.',
+  vault_unavailable: 'O cofre de certificados não respondeu ao agente. Nenhuma consulta foi feita.',
+  client_certificate_invalid: 'O certificado guardado não abriu com a senha registrada. Envie o certificado de novo. Nenhuma consulta foi feita.',
+  client_certificate_mismatch: 'O certificado guardado é de outra empresa. Nenhuma consulta foi feita.',
+  client_certificate_expired: 'O certificado da empresa está vencido. Nenhuma consulta foi feita.',
+  client_authorization_denied: 'O Serpro recusou o termo de autorização assinado com o certificado da empresa. A equipe precisa revisar antes de repetir.',
+  client_token_unavailable: 'O Serpro informou que já existe autorização ativa desta empresa, emitida antes. Aguarde algumas horas e peça de novo.',
 };
 // Resultado devolvido pelo agente. Idempotente: um pedido já finalizado não é reprocessado.
 export async function completeSitfis(input: { requestId: string; cnpj: string; ok: boolean; code?: string; pdf?: Buffer; text?: string; collectedAt?: string; sha256?: string }) {

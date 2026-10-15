@@ -4,12 +4,15 @@ import { join } from "node:path";
 import { Queue } from "bullmq";
 import type { RedisOptions } from "ioredis";
 import { z } from "zod";
+import type { Redis } from "ioredis";
 import { isValidCnpj } from "../orchestrator/parser.js";
+import type { CertificateMaterial } from "../security/certificate-provider.js";
 
 // Situação Fiscal (SITFIS) pedida pelo sistema FS para empresas com procuração. O sistema não tem o certificado da FS:
 // a consulta (cobrada) roda no worker, uma única vez por pedido, e o resultado volta para o sistema.
 export const SITFIS_QUEUE = "sistema-sitfis";
-export const sitfisRequestSchema = z.object({ requestId: z.string().regex(/^sitfis-[a-f0-9-]{36}$/), cnpj: z.string().regex(/^\d{14}$/).refine(isValidCnpj) }).strict();
+// autor "contribuinte": a empresa não deu procuração; a consulta usa o certificado dela guardado no cofre do sistema.
+export const sitfisRequestSchema = z.object({ requestId: z.string().regex(/^sitfis-[a-f0-9-]{36}$/), cnpj: z.string().regex(/^\d{14}$/).refine(isValidCnpj), autor: z.enum(["fs", "contribuinte"]).optional() }).strict();
 export type SitfisJob = z.infer<typeof sitfisRequestSchema> & { started?: boolean };
 export function bearerMatches(header: string | undefined, token: string): boolean {
   const expected = Buffer.from(`Bearer ${token}`), received = Buffer.from(header ?? "");
@@ -66,4 +69,33 @@ export async function processSitfisJob(job: SitfisJob, deps: SitfisJobDependenci
     return form;
   });
   return { status: "delivered" };
+}
+
+// Token do termo de autorização assinado pela empresa: guardado até vencer, para não reenviar o termo a cada consulta.
+export interface ClientTokenStore { get(cnpj: string): Promise<string | null>; set(cnpj: string, token: string, expiresAt: number): Promise<void> }
+export class RedisClientTokenStore implements ClientTokenStore {
+  constructor(private readonly redis: Redis, private readonly now: () => number = Date.now) {}
+  async get(cnpj: string) { return this.redis.get(`serpro:autor-token:${cnpj}`); }
+  async set(cnpj: string, token: string, expiresAt: number) {
+    const ttl = expiresAt - this.now() - 60_000;
+    if (ttl > 0) await this.redis.set(`serpro:autor-token:${cnpj}`, token, "PX", ttl);
+  }
+}
+export interface ClientAuthorizationDependencies {
+  store: ClientTokenStore;
+  certificate(cnpj: string): Promise<CertificateMaterial>;
+  sign(material: CertificateMaterial, cnpj: string): string;
+  authorize(cnpj: string, signedTermoBase64: string): Promise<{ token: string; expiresAt: number } | "cached">;
+}
+export async function clientToken(cnpj: string, deps: ClientAuthorizationDependencies): Promise<string> {
+  const cached = await deps.store.get(cnpj);
+  if (cached) return cached;
+  const material = await deps.certificate(cnpj);
+  try {
+    const result = await deps.authorize(cnpj, deps.sign(material, cnpj));
+    // O Serpro diz que já há token válido, mas ele não está guardado aqui: só resta esperar o vencimento.
+    if (result === "cached") throw new Error("client_token_unavailable");
+    await deps.store.set(cnpj, result.token, result.expiresAt);
+    return result.token;
+  } finally { material.pfx.fill(0); }
 }

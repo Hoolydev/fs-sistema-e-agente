@@ -6,6 +6,8 @@ import { isValidCnpj, normalizeCnpj } from "@/lib/diagnostico/model";
 import { PgfnError } from "@/lib/diagnostico/pgfn";
 import { runPreliminaryDiagnostic } from "@/lib/diagnostico/consulta";
 import { requestSitfis } from "@/lib/diagnostico/sitfis";
+import { listCertificates } from "@/lib/certificados/store";
+import { isExternal } from "@/lib/auth/roles";
 import { z } from "zod";
 
 // Leitura da Receita Federal sem procuração, feita pelo analista. Valores em centavos; o nome do analista vem da sessão.
@@ -17,7 +19,7 @@ const rfbManualSchema = z.object({
   items: z.array(z.object({ description: text(2, 120), period: text(0, 40), total: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER) })).max(50).optional(),
 }).strict();
 // rfbSitfis: a empresa outorgou procuração à FS; após o preliminar, o agente consulta a Situação Fiscal na Receita.
-const extrasSchema = z.object({ rfbManual: rfbManualSchema.nullable().optional(), annexIds: z.array(z.string().max(90)).max(30).optional(), rfbSitfis: z.boolean().optional() });
+const extrasSchema = z.object({ rfbManual: rfbManualSchema.nullable().optional(), annexIds: z.array(z.string().max(90)).max(30).optional(), rfbSitfis: z.boolean().optional(), rfbCertificado: z.boolean().optional() });
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -37,11 +39,18 @@ export async function POST(request: Request) {
   const extras = extrasSchema.safeParse(body);
   if (!extras.success) return NextResponse.json({ code: "INVALID_INPUT", message: "Confira a leitura da Receita Federal: referência da fonte (mín. 3 caracteres), descrição e valor de cada débito." }, { status: 422, headers });
   const rfbManual = extras.data.rfbManual ? { ...extras.data.rfbManual, analyst: session.user.name } : null;
+  // Certificado da empresa: precisa estar guardado e válido antes de qualquer consulta cobrada.
+  const withCertificate = !extras.data.rfbSitfis && extras.data.rfbCertificado === true;
+  if (withCertificate) {
+    if (isExternal(roleOf(session.user))) return NextResponse.json({ code: "FORBIDDEN", message: "O uso de certificado da empresa é restrito à equipe interna da FS." }, { status: 403, headers });
+    const stored = await listCertificates(normalizeCnpj(raw)).catch(() => []);
+    if (!stored.some(c => c.active && c.daysLeft >= 0)) return NextResponse.json({ code: "CERTIFICATE_REQUIRED", message: "Não há certificado válido desta empresa no cofre. Envie o certificado A1 com a senha. Nenhuma consulta foi feita." }, { status: 422, headers });
+  }
   try {
     // Externo só reaproveita e arquiva pareceres próprios.
-    const result = await runPreliminaryDiagnostic(normalizeCnpj(raw), session.user.id, { force, scope: scopeFor({ id: session.user.id, role: roleOf(session.user) }), rfbManual: extras.data.rfbSitfis ? null : rfbManual, annexIds: extras.data.annexIds ?? [] });
+    const result = await runPreliminaryDiagnostic(normalizeCnpj(raw), session.user.id, { force, scope: scopeFor({ id: session.user.id, role: roleOf(session.user) }), rfbManual: extras.data.rfbSitfis || withCertificate ? null : rfbManual, annexIds: extras.data.annexIds ?? [] });
     const scope = scopeFor({ id: session.user.id, role: roleOf(session.user) });
-    const sitfis = extras.data.rfbSitfis ? await requestSitfis({ baseDocumentId: result.id, cnpj: normalizeCnpj(raw), actor: { id: session.user.id, name: session.user.name }, ownerId: scope?.ownerId ?? null }).catch(() => null) : null;
+    const sitfis = extras.data.rfbSitfis || withCertificate ? await requestSitfis({ baseDocumentId: result.id, cnpj: normalizeCnpj(raw), actor: { id: session.user.id, name: session.user.name }, ownerId: scope?.ownerId ?? null, autor: withCertificate ? "contribuinte" : "fs" }).catch(() => null) : null;
     const rfbText = sitfis ? (sitfis.status === "solicitado" ? "consulta da Receita Federal solicitada ao agente; a versão completa aparece no acervo em alguns minutos" : sitfis.status === "concluido" ? "Receita Federal já consultada para este parecer" : sitfis.message) : rfbManual ? "Receita Federal pela leitura do analista" : "Receita Federal pendente de procuração";
     const message = result.reused && !sitfis ? "Já existe um diagnóstico recente deste CNPJ. Reabrindo o parecer arquivado, sem nova consulta."
       : `${result.reused ? "Parecer recente reaproveitado, sem nova consulta PGFN" : result.pgfnReused ? "Nova versão emitida com a consulta PGFN já realizada (sem nova cobrança)" : "Diagnóstico preliminar emitido: PGFN e cadastro coletados"}; ${rfbText}.`;
