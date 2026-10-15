@@ -1,0 +1,9 @@
+# Cofre de certificados A1 dos clientes: chave privada que abre os envelopes guardados no sistema FS.
+# Gerada na VPS em 15/10/2026 (secrets/cofre/privada.pem, root:1001 640); a pública está na Vercel
+# (FS_CERT_VAULT_PUBLIC_KEY). Usar junto de prod + cert + webhook + sitfis. Só o worker precisa da chave.
+services:
+  worker:
+    environment:
+      FS_CERT_VAULT_PRIVATE_KEY_FILE: /run/secrets/cofre/privada.pem
+    volumes:
+      - ./secrets/cofre:/run/secrets/cofre:ro

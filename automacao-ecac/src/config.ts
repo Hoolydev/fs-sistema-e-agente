@@ -73,6 +73,8 @@ const configSchema = z.object({
   CERT_PFX_PATH: z.string().default(""),
   CERT_PFX_PASSPHRASE: z.string().default(""),
   CERT_PFX_PASSPHRASE_FILE: z.string().default(""),
+  // Chave privada do cofre de certificados dos clientes (abre os envelopes guardados no sistema FS).
+  FS_CERT_VAULT_PRIVATE_KEY_FILE: z.string().default(""),
   DOCUMENT_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
   RPA_JOB_TIMEOUT_MS: z.coerce.number().int().positive().default(180_000),
   HUMAN_INTERVENTION_TIMEOUT_MS: z.coerce.number().int().positive().default(600_000),

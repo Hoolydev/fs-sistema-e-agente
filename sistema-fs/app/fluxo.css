@@ -63,3 +63,19 @@
 .ctrl-sectors label{display:flex;align-items:center;gap:5px;cursor:pointer}
 .ctrl-sectors small{flex-basis:100%;font-size:10px;color:#9aabb8}
 .panel>.flow-board{padding:0 18px 18px;margin-bottom:0}
+/* Cofre de certificados na ficha da empresa */
+.cert-box{display:flex;flex-direction:column;gap:10px;margin-bottom:8px}
+.cert-card{display:flex;gap:10px;align-items:flex-start;border:1px solid #cce6d8;background:#f2faf6;border-radius:6px;padding:12px}
+.cert-card>svg{color:#327c60;flex-shrink:0;margin-top:2px}
+.cert-card.warn{border-color:#ebddb9;background:#fffaf0}.cert-card.warn>svg{color:#896b30}
+.cert-card.late{border-color:#f0c9c5;background:#fff4f3}.cert-card.late>svg{color:#a83e35}
+.cert-card>div{flex:1;min-width:0}
+.cert-card strong{display:block;font-size:13px;overflow-wrap:anywhere}
+.cert-card small{display:block;font-size:11px;color:#6e8496;margin-top:3px}
+.cert-form{display:flex;flex-direction:column;gap:10px;border:1px dashed #d3dee6;border-radius:6px;padding:12px}
+.cert-hint{display:flex;gap:7px;font-size:11px;color:#6e8496;line-height:1.5}
+.cert-hint svg{flex-shrink:0;margin-top:2px;color:#b89960}
+.cert-notice{background:#eaf7f0;color:#327c60;padding:9px 11px;border-radius:5px;font-size:12px}
+.cert-audit summary{font-size:12px;color:#5d7a90;cursor:pointer}
+.cert-audit ul{margin:8px 0 0;padding:0;list-style:none;font-size:11px;color:#4d687c;display:flex;flex-direction:column;gap:4px}
+.cert-audit li span{color:#8195a4;margin-right:4px}

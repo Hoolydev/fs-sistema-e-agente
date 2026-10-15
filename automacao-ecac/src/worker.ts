@@ -36,7 +36,7 @@ const logger = createLogger(config.LOG_LEVEL);
 const whatsapp = createWhatsAppGateway(config, logger);
 const certificateProvider: CertificateProvider =
   config.CERTIFICATE_PROVIDER === "vault"
-    ? new VaultCertificateProvider()
+    ? new VaultCertificateProvider(config)
     : new LocalCertificateProvider(config);
 const fiscalAnalysis = new OpenAIFiscalAnalysisGateway(config);
 const automation: EcacAutomation =

@@ -11,6 +11,7 @@ import { formatCnpj, isValidCnpj, normalizeCnpj } from "@/lib/diagnostico/model"
 import { formatDay, reviewLabels } from "@/lib/controller/model";
 import type { Company } from "@/lib/empresas/store";
 import { CompanyDocuments } from "./company-documents";
+import { CompanyCertificate } from "./company-certificate";
 
 export function CompanySheet() {
   const { companySelected, openCompany, companies } = useController();
@@ -76,6 +77,7 @@ function CompanyPanel({ company }: { company: Company | null }) {
           </div>
           <h3>Documentação</h3>
           <CompanyDocuments cnpj={company.cnpj} />
+          {allowed.internal && <><h3>Certificado digital (A1)</h3><CompanyCertificate cnpj={company.cnpj} /></>}
           <h3>Processos</h3>
           {own.length ? <ul className="ctrl-files">{own.map(p => <li key={p.id}><Building2 size={15} /><button className="ctrl-link" onClick={() => { openCompany(null); open(p); }}>{p.processNumber || "sem nº"} · {p.dispatchStatus}</button><small>{reviewLabels[p.reviewState]}</small><ChevronRight size={14} /></li>)}</ul> : <p className="muted">Nenhum processo no Controller para esta empresa.</p>}
         </>
