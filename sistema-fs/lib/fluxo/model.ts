@@ -8,7 +8,8 @@ export type Sector = (typeof sectors)[number];
 export const sectorLabels: Record<Sector, string> = { comercial: "Comercial", cadastro: "Cadastro", controller: "Controller", juridico: "Jurídico" };
 // Tela do sistema onde cada área trabalha.
 export const sectorScreens: Record<Sector, string> = { comercial: "/comercial", cadastro: "/administrativo", controller: "/controller", juridico: "/juridico" };
-export type Substage = { id: string; label: string; hint?: string };
+// approval: subetapa de aprovação; quem não aprova na área pode levar o cartão até ela, mas não tirá-lo dela nem passar adiante.
+export type Substage = { id: string; label: string; hint?: string; approval?: boolean };
 export const substages: Record<Sector, Substage[]> = {
   // Mesmos ids das etapas do funil do Comercial (lib/comercial/model.ts).
   comercial: [
@@ -30,7 +31,7 @@ export const substages: Record<Sector, Substage[]> = {
   ],
   juridico: [
     { id: "pre-analise", label: "Pré-análise" },
-    { id: "analise-chefia", label: "Análise da chefia" },
+    { id: "analise-chefia", label: "Análise da chefia", approval: true },
     { id: "ajuizado", label: "Ajuizado" },
   ],
 };
@@ -61,4 +62,16 @@ export const sectorsSchema = z.object({ userId: z.string().min(1).max(100), sect
 export function since(iso: string, now = Date.now()) {
   const days = Math.floor((now - Date.parse(iso)) / 86_400_000);
   return days <= 0 ? "hoje" : days === 1 ? "há 1 dia" : `há ${days} dias`;
+}
+// Movimento que exige quem aprova na área: sair da subetapa de aprovação (ou de depois dela) ou ir além dela.
+export function needsApproval(sector: Sector, from: string, to: string) {
+  const list = substages[sector], gate = list.findIndex(s => s.approval);
+  if (gate < 0) return false;
+  const a = list.findIndex(s => s.id === from), b = list.findIndex(s => s.id === to);
+  return a >= gate || b > gate;
+}
+// Cartão já na subetapa de aprovação (ou depois): só quem aprova na área move.
+export function atOrPastApproval(sector: Sector, id: string) {
+  const list = substages[sector], gate = list.findIndex(s => s.approval);
+  return gate >= 0 && list.findIndex(s => s.id === id) >= gate;
 }

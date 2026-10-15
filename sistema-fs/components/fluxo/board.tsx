@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { formatCnpj } from "@/lib/diagnostico/model";
 import { searchKey } from "@/lib/controller/model";
 import {
-  lastSubstage, nextSector, previousSector, sectorLabels, sectorScreens, sectors, since, substages, substageLabel,
+  atOrPastApproval, lastSubstage, needsApproval, nextSector, previousSector, sectorLabels, sectorScreens, sectors, since, substages, substageLabel,
   type FlowCard, type Sector,
 } from "@/lib/fluxo/model";
 
@@ -46,6 +46,7 @@ export function FlowBoard({ sector, extra, onOpen, refreshKey }: { sector: Secto
 
   async function move(card: FlowCard, substage: string) {
     if (!rights.canWork || substage === card.substage) return;
+    if (!rights.canAdvance && needsApproval(sector, card.substage, substage)) { setError("Este passo é a aprovação da chefia da área. Peça ao responsável para mover o cartão."); return; }
     const before = cards;
     setCards(list => list.map(c => (c.cnpj === card.cnpj ? { ...c, substage, substageAt: new Date().toISOString() } : c)));
     setBusy(card.cnpj); setNotice("");
@@ -123,7 +124,7 @@ export function FlowBoard({ sector, extra, onOpen, refreshKey }: { sector: Secto
                   <article
                     key={card.cnpj}
                     className={`flow-card ${dragging === card.cnpj ? "dragging" : ""} ${busy === card.cnpj ? "busy" : ""}`}
-                    draggable={rights.canWork && busy !== card.cnpj}
+                    draggable={rights.canWork && busy !== card.cnpj && (rights.canAdvance || !atOrPastApproval(sector, card.substage))}
                     onDragStart={e => { e.dataTransfer.setData("text/plain", card.cnpj); e.dataTransfer.effectAllowed = "move"; setDragging(card.cnpj); }}
                     onDragEnd={() => { setDragging(null); setOver(null); }}
                   >
@@ -143,7 +144,7 @@ export function FlowBoard({ sector, extra, onOpen, refreshKey }: { sector: Secto
                       <label className="flow-move">
                         <span className="sr-only">Mover {card.company} para</span>
                         <select value={card.substage} disabled={busy === card.cnpj} onChange={e => void move(card, e.target.value)}>
-                          {substages[sector].map(s => <option key={s.id} value={s.id}>{s.label}{s.hint ? ` (${s.hint})` : ""}</option>)}
+                          {substages[sector].map(s => <option key={s.id} value={s.id} disabled={!rights.canAdvance && s.id !== card.substage && needsApproval(sector, card.substage, s.id)}>{s.label}{s.hint ? ` (${s.hint})` : ""}</option>)}
                         </select>
                       </label>
                     )}

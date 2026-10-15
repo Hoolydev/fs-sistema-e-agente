@@ -11,7 +11,7 @@ import { documentChecklist } from "@/lib/documentos/tipos";
 import { alertRecipients, teamDirectory } from "@/lib/equipe/team";
 import { formatCnpj, normalizeCnpj } from "@/lib/diagnostico/model";
 import {
-  firstSubstage, lastSubstage, nextSector, parseSectors, previousSector, sectorLabels, sectors, substageLabel, substageOf,
+  firstSubstage, lastSubstage, needsApproval, nextSector, parseSectors, previousSector, sectorLabels, sectors, substageLabel, substageOf,
   type FlowCard, type FlowHistory, type Sector,
 } from "./model";
 
@@ -112,6 +112,13 @@ export async function setUserSectors(userId: string, list: Sector[]) {
   await query("INSERT INTO fs_user_sectors (user_id,sectors,updated_at) VALUES ($1,$2,$3) ON CONFLICT(user_id) DO UPDATE SET sectors=excluded.sectors, updated_at=excluded.updated_at", [userId, value, at]);
   return parseSectors(value);
 }
+// Quem aprova numa área: administrador em todas; revisor (advogado) nas áreas dele (ou em todas, se não tiver setor definido).
+export async function canApprove(actor: Actor, sector: Sector) {
+  if (actor.role === "admin") return true;
+  if (!isReviewer(actor.role)) return false;
+  const own = await userSectors(actor.id);
+  return !own.length || own.includes(sector);
+}
 export async function canWork(actor: Actor, sector: Sector) {
   if (actor.role === "admin") return true;
   if (actor.role === "externo" && (sector === "comercial" || sector === "juridico")) return false;
@@ -139,6 +146,8 @@ export async function moveCard(cnpj: string, substage: string, version: string, 
   if (!(await canWork(actor, card.sector))) throw new Error("FORBIDDEN_SECTOR");
   if (!substageOf(card.sector, substage)) throw new Error("INVALID_SUBSTAGE");
   if (substage === card.substage) return card;
+  // Analista leva até a aprovação; aprovar (sair dela ou ir além) é de quem aprova na área.
+  if (needsApproval(card.sector, card.substage, substage) && !(await canApprove(actor, card.sector))) throw new Error("APPROVAL_REQUIRED");
   const at = new Date().toISOString();
   const updated = await query("UPDATE fs_client_flow SET substage=$1, substage_at=$2, updated_at=$3, updated_by=$4, updated_by_id=$5 WHERE cnpj=$6 AND updated_at=$7 RETURNING cnpj", [substage, at, at, actor.name, actor.id, card.cnpj, version]);
   if (!updated.length) throw new Error("STALE");
@@ -157,8 +166,8 @@ async function sectorRecipients(sector: Sector) {
 // Mudar de área. Para frente: só da última subetapa e com validação de um revisor. Para trás: revisor, com justificativa.
 export async function advanceCard(cnpj: string, version: string, direction: "proximo" | "anterior", note: string, actor: Actor, scope: Scope = null) {
   await setupFlow();
-  if (!isReviewer(actor.role)) throw new Error("REVIEWER_REQUIRED");
   const card = await load(cnpj, version, scope);
+  if (!(await canApprove(actor, card.sector))) throw new Error("REVIEWER_REQUIRED");
   const target = direction === "proximo" ? nextSector(card.sector) : previousSector(card.sector);
   if (!target) throw new Error(direction === "proximo" ? "LAST_SECTOR" : "FIRST_SECTOR");
   if (direction === "proximo" && card.substage !== lastSubstage(card.sector)) throw new Error("SUBSTAGE_NOT_DONE");

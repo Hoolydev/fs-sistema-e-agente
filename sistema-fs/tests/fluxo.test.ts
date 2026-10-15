@@ -9,7 +9,7 @@ import { listLeads, saveEvent } from '../lib/comercial/store';
 import { createProcess, listProcesses } from '../lib/controller/store';
 import { createCompany } from '../lib/empresas/store';
 import { advanceSchema, lastSubstage, nextSector, substages } from '../lib/fluxo/model';
-import { advanceCard, canWork, controllerSubstage, flowHistory, getCard, listFlow, moveCard, setUserSectors } from '../lib/fluxo/store';
+import { advanceCard, canApprove, canWork, controllerSubstage, flowHistory, getCard, listFlow, moveCard, setUserSectors } from '../lib/fluxo/store';
 import type { DiagnosticEvent } from '../lib/comercial/model';
 
 const admin = { id: 'u-admin', name: 'Fernando', role: 'admin' as const };
@@ -88,4 +88,30 @@ test('setores por pessoa limitam quem arrasta; externo não atua no Comercial ne
   assert.equal(await canWork(admin, 'juridico'), true);
   // Cliente de outro dono não aparece para o externo.
   assert.equal((await listFlow('controller', { ownerId: external.id })).length, 0);
+});
+
+test('Jurídico: analista leva até a análise da chefia; aprovar e ajuizar é do responsável da área', async () => {
+  const D = '47733961000179', samuel = { id: 'u-sam', name: 'Samuel', role: 'operador' as const }, max = { id: 'u-max', name: 'Max', role: 'operador' as const };
+  const leonardo = { id: 'u-leo', name: 'Leonardo', role: 'advogado' as const };
+  await setUserSectors(samuel.id, ['cadastro', 'juridico']); await setUserSectors(max.id, ['cadastro', 'controller']); await setUserSectors(leonardo.id, ['juridico']); await setUserSectors(external.id, ['cadastro']);
+  await createProcess(process0(D, 'EMPRESA D'), admin);
+  await listFlow('controller');
+  let card = (await getCard(D))!;
+  card = await moveCard(D, 'analise-chefia-despacho', card.updatedAt, max);
+  await assert.rejects(moveCard(D, 'tem-despacho', card.updatedAt, samuel), /FORBIDDEN_SECTOR/);
+  // Leonardo só aprova no Jurídico: tirar do Controller é com a chefia do escritório.
+  await assert.rejects(advanceCard(D, card.updatedAt, 'proximo', '', leonardo), /REVIEWER_REQUIRED/);
+  card = await advanceCard(D, card.updatedAt, 'proximo', '', admin);
+  assert.equal(card.sector, 'juridico');
+  await assert.rejects(moveCard(D, 'ajuizado', card.updatedAt, samuel), /APPROVAL_REQUIRED/);
+  card = await moveCard(D, 'analise-chefia', card.updatedAt, samuel);
+  await assert.rejects(moveCard(D, 'ajuizado', card.updatedAt, samuel), /APPROVAL_REQUIRED/);
+  await assert.rejects(moveCard(D, 'pre-analise', card.updatedAt, samuel), /APPROVAL_REQUIRED/);
+  card = await moveCard(D, 'ajuizado', card.updatedAt, leonardo);
+  assert.equal(card.substage, 'ajuizado');
+  card = await moveCard(D, 'pre-analise', card.updatedAt, leonardo);
+  card = await advanceCard(D, card.updatedAt, 'anterior', 'Faltam documentos do processo', leonardo);
+  assert.deepEqual([card.sector, card.substage], ['controller', 'analise-chefia-despacho']);
+  assert.equal(await canWork(external, 'controller'), false); assert.equal(await canWork(external, 'cadastro'), true);
+  assert.equal(await canApprove(leonardo, 'juridico'), true); assert.equal(await canApprove(leonardo, 'controller'), false); assert.equal(await canApprove(samuel, 'juridico'), false);
 });
