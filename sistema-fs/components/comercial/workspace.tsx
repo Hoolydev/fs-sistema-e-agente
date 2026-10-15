@@ -8,9 +8,11 @@ import {formatCnpj,normalizeCnpj} from '@/lib/diagnostico/model';
 import {FlowBoard} from '@/components/fluxo/board';
 const date=(s:string)=>new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short'}).format(new Date(s));
 const fileUrl=(lead:Lead,file:Attachment)=>`/api/comercial/leads/${lead.id}/anexos/${file.id}`;
+// Contatos carregados por último, mantidos entre as trocas de tela (abre na hora e atualiza em segundo plano).
+let cachedLeads:Lead[]|null=null;
 export default function CommercialWorkspace(){
- const [leads,setLeads]=useState<Lead[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[selected,setSelected]=useState<string|null>(null),[tab,setTab]=useState('dados'),[busy,setBusy]=useState(false),[preview,setPreview]=useState<Attachment|null>(null);
- const load=useCallback(async()=>{try{const res=await fetch('/api/comercial/leads',{cache:'no-store'}),data=await res.json();if(!res.ok)throw Error(data.message||'Não foi possível carregar os contatos.');setLeads(data.leads);setError('');}catch(e){setError(e instanceof Error?e.message:'Falha na conexão.');}finally{setLoading(false);}},[]);
+ const [leads,setLeads]=useState<Lead[]>(()=>cachedLeads??[]),[loading,setLoading]=useState(()=>!cachedLeads),[error,setError]=useState(''),[selected,setSelected]=useState<string|null>(null),[tab,setTab]=useState('dados'),[busy,setBusy]=useState(false),[preview,setPreview]=useState<Attachment|null>(null);
+ const load=useCallback(async()=>{try{const res=await fetch('/api/comercial/leads',{cache:'no-store'}),data=await res.json();if(!res.ok)throw Error(data.message||'Não foi possível carregar os contatos.');cachedLeads=data.leads;setLeads(data.leads);setError('');}catch(e){setError(e instanceof Error?e.message:'Falha na conexão.');}finally{setLoading(false);}},[]);
  useEffect(()=>{const initial=setTimeout(()=>void load(),0);const timer=setInterval(()=>{if(document.visibilityState==='visible')void load();},30000);return()=>{clearTimeout(initial);clearInterval(timer);};},[load]);
  const lead=leads.find(l=>l.id===selected);
  const replace=(updated:Lead)=>setLeads(old=>old.map(l=>l.id===updated.id?updated:l));

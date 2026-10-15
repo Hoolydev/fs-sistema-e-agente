@@ -12,7 +12,10 @@ export async function GET(request: Request) {
   const sector = new URL(request.url).searchParams.get("setor");
   if (!isSector(sector)) return reply({ message: "Área inválida." }, 400);
   if (actor.role === "externo" && (sector === "comercial" || sector === "juridico")) return reply({ message: "Seu perfil de acesso não permite esta área." }, 403);
-  try { return reply({ sector, cards: await listFlow(sector, scopeFor(actor)), canWork: await canWork(actor, sector), canAdvance: await canApprove(actor, sector) }); }
+  try {
+    const [cards, work, advance] = await Promise.all([listFlow(sector, scopeFor(actor)), canWork(actor, sector), canApprove(actor, sector)]);
+    return reply({ sector, cards, canWork: work, canAdvance: advance });
+  }
   catch (error) { return flowError(error); }
 }
 // Arrastar o cartão para outra subetapa da mesma área.

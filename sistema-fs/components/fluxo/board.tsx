@@ -14,12 +14,14 @@ import {
 type Pending = { card: FlowCard; direction: "proximo" | "anterior" } | null;
 const tones = ["navy", "blue", "gold", "green", "teal"];
 
+// Último quadro de cada área, mantido entre as trocas de tela: abre na hora e atualiza em segundo plano.
+const boards = new Map<Sector, { cards: FlowCard[]; canWork: boolean; canAdvance: boolean }>();
 // Quadro de etapas de uma área: um cartão por CNPJ, arrastado entre as subetapas. Na última subetapa um revisor
 // valida e envia o cliente para a próxima área, que assume o atendimento.
 export function FlowBoard({ sector, extra, onOpen, refreshKey }: { sector: Sector; extra?: (card: FlowCard) => ReactNode; onOpen?: (card: FlowCard) => void; refreshKey?: unknown }) {
-  const [cards, setCards] = useState<FlowCard[]>([]);
-  const [rights, setRights] = useState({ canWork: false, canAdvance: false });
-  const [loading, setLoading] = useState(true);
+  const [cards, setCards] = useState<FlowCard[]>(() => boards.get(sector)?.cards ?? []);
+  const [rights, setRights] = useState(() => { const b = boards.get(sector); return { canWork: b?.canWork ?? false, canAdvance: b?.canAdvance ?? false }; });
+  const [loading, setLoading] = useState(() => !boards.has(sector));
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [query, setQuery] = useState("");
@@ -35,6 +37,7 @@ export function FlowBoard({ sector, extra, onOpen, refreshKey }: { sector: Secto
       const res = await fetch(`/api/fluxo?setor=${sector}`, { cache: "no-store" }), data = await res.json();
       if (!res.ok) throw new Error(data.message || "Não foi possível carregar o quadro.");
       setCards(data.cards); setRights({ canWork: data.canWork, canAdvance: data.canAdvance }); setError("");
+      boards.set(sector, { cards: data.cards, canWork: data.canWork, canAdvance: data.canAdvance });
     } catch (e) { setError(e instanceof Error ? e.message : "Falha na conexão."); }
     finally { setLoading(false); }
   }, [sector]);
@@ -44,6 +47,7 @@ export function FlowBoard({ sector, extra, onOpen, refreshKey }: { sector: Secto
     return () => { clearTimeout(first); clearInterval(timer); };
   }, [load, refreshKey]);
 
+  useEffect(() => { const b = boards.get(sector); if (b) boards.set(sector, { ...b, cards }); }, [cards, sector]);
   async function move(card: FlowCard, substage: string) {
     if (!rights.canWork || substage === card.substage) return;
     if (!rights.canAdvance && needsApproval(sector, card.substage, substage)) { setError("Este passo é a aprovação da chefia da área. Peça ao responsável para mover o cartão."); return; }

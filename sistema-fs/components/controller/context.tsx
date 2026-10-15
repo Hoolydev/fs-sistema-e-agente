@@ -25,23 +25,29 @@ const Context = createContext<Value | null>(null);
 export function useController() { const value = useContext(Context); if (!value) throw new Error("ControllerProvider ausente"); return value; }
 
 type Loaded = { processes: ControllerProcess[]; role: Role; companies: Company[] } | { error: string };
+// Último resultado carregado, mantido entre as trocas de tela: a nova tela abre na hora e atualiza em segundo plano.
+let cached: Extract<Loaded, { processes: ControllerProcess[] }> | null = null;
 async function load(): Promise<Loaded> {
   try {
-    const response = await fetch("/api/controller/processos", { cache: "no-store" });
-    if (response.status === 401) { window.location.assign("/login"); return { processes: [], role: "operador", companies: [] }; }
+    // Processos e empresas em paralelo (antes eram buscados um depois do outro).
+    const [response, companies] = await Promise.all([
+      fetch("/api/controller/processos", { cache: "no-store" }),
+      fetch("/api/empresas", { cache: "no-store" }).then(r => r.ok ? r.json() : { companies: [] }).then(d => d.companies ?? []).catch(() => []),
+    ]);
+    if (response.status === 401) { cached = null; window.location.assign("/login"); return { processes: [], role: "operador", companies: [] }; }
     const data = await response.json();
     if (!response.ok) return { error: data.message || "Não foi possível carregar os processos." };
-    const companies = await fetch("/api/empresas", { cache: "no-store" }).then(r => r.ok ? r.json() : { companies: [] }).then(d => d.companies ?? []).catch(() => []);
-    return { processes: data.processes, role: data.role, companies };
+    cached = { processes: data.processes, role: data.role, companies };
+    return cached;
   } catch { return { error: "Não foi possível carregar os processos. Verifique sua conexão." }; }
 }
 export function ControllerProvider({ children }: { children: ReactNode }) {
-  const [processes, setProcesses] = useState<ControllerProcess[]>([]);
-  const [role, setRole] = useState<Role>("operador");
-  const [loading, setLoading] = useState(true);
+  const [processes, setProcesses] = useState<ControllerProcess[]>(() => cached?.processes ?? []);
+  const [role, setRole] = useState<Role>(() => cached?.role ?? "operador");
+  const [loading, setLoading] = useState(() => !cached);
   const [error, setError] = useState("");
   const [selected, open] = useState<Value["selected"]>(null);
-  const [companies, setCompanies] = useState<Company[]>([]);
+  const [companies, setCompanies] = useState<Company[]>(() => cached?.companies ?? []);
   const [companySelected, openCompany] = useState<Value["companySelected"]>(null);
   const [notice, setNotice] = useState("");
   const notify = useCallback((text: string) => { setNotice(text); if (text) setTimeout(() => setNotice(current => current === text ? "" : current), 4500); }, []);

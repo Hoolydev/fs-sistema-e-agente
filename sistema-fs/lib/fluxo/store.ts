@@ -49,8 +49,22 @@ export function controllerSubstage(p: { admStatus: string; dispatchStatus: strin
 }
 // Coloca no fluxo os clientes que já existem no sistema e ainda não têm etapa: quem tem processo vai para o Controller,
 // quem só tem cadastro vai para o Cadastro e quem só é contato do site vai para o Comercial. Quem já está no fluxo não muda.
+// Assinatura das fontes (quantidade e último registro de processos, empresas e contatos, e tamanho do fluxo):
+// a sincronização completa só roda quando algo mudou, poupando consultas a cada abertura do quadro.
+let lastSignature = "";
+async function sourcesSignature() {
+  const [r] = await query("SELECT (SELECT COUNT(*) FROM fs_controller_processes) AS p, (SELECT MAX(created_at) FROM fs_controller_processes) AS pm, (SELECT COUNT(*) FROM fs_companies) AS c, (SELECT MAX(created_at) FROM fs_companies) AS cm, (SELECT COUNT(*) FROM fs_crm_leads) AS l, (SELECT MAX(created_at) FROM fs_crm_leads) AS lm, (SELECT COUNT(*) FROM fs_client_flow) AS f");
+  return [r.p, r.pm, r.c, r.cm, r.l, r.lm, r.f].map(v => String(v ?? "")).join("|");
+}
 export async function syncFlow() {
   await setupFlow();
+  await Promise.all([setupController(), setupCompanies()]);
+  const before = await sourcesSignature();
+  if (before === lastSignature) return;
+  await fullSync();
+  lastSignature = await sourcesSignature();
+}
+async function fullSync() {
   const known = new Set((await query("SELECT cnpj FROM fs_client_flow")).map(r => String(r.cnpj)));
   const at = new Date().toISOString();
   const add = async (cnpj: string, company: string, sector: Sector, substage: string, ownerId: string | null, origin: string) => {
@@ -60,11 +74,10 @@ export async function syncFlow() {
       [cnpj, company, sector, substage, at, at, at, at, system.name, system.id, ownerId]);
     if (inserted.length) await record(cnpj, null, { sector, substage }, system, origin, at);
   };
-  await setupController();
   const latest = new Map<string, Awaited<ReturnType<typeof listProcesses>>[number]>();
   for (const p of await listProcesses()) { const prev = latest.get(p.cnpj); if (!prev || p.updatedAt > prev.updatedAt) latest.set(p.cnpj, p); }
   for (const p of latest.values()) await add(p.cnpj, p.company, "controller", controllerSubstage(p), p.ownerId ?? null, "Entrou no fluxo a partir do processo do Controller.");
-  await setupCompanies(); await setupDocuments();
+  await setupDocuments();
   const docs = await query("SELECT cnpj, doc_type, kind FROM fs_documents");
   for (const c of await query("SELECT cnpj, name, owner_id FROM fs_companies ORDER BY created_at")) {
     const cnpj = String(c.cnpj), complete = documentChecklist(docs.filter(d => String(d.cnpj) === cnpj).map(d => ({ docType: text(d.doc_type), kind: String(d.kind) }))).every(i => i.done);
