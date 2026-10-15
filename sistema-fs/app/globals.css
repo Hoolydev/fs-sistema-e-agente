@@ -136,10 +136,29 @@ button:disabled {
   border-bottom: 1px solid #ffffff10;
   margin-bottom: 12px;
 }
-.brand-logo {
-  width: 213px;
-  height: auto;
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  border-radius: 4px;
+}
+.sidebar-brand:focus-visible {
+  outline: 2px solid #bba273;
+  outline-offset: 4px;
+}
+.sidebar-symbol {
+  width: 41px;
+  height: 46px;
   display: block;
+  flex-shrink: 0;
+}
+.sidebar-name {
+  font-family: Georgia, serif;
+  text-transform: uppercase;
+  color: #fff;
+  font-size: 15px;
+  letter-spacing: 2.4px;
+  line-height: 1.25;
 }
 .brand-caption {
   font-size: 10px;
@@ -147,7 +166,11 @@ button:disabled {
   color: #bba273;
   display: block;
   margin-top: 8px;
-  padding-left: 38px;
+  padding-left: 52px;
+  white-space: nowrap;
+}
+.brand-header .brand-caption {
+  letter-spacing: 1.9px;
 }
 .nav-content {
   padding: 0 12px !important;

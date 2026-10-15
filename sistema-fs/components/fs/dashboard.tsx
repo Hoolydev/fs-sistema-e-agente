@@ -24,8 +24,10 @@ function Navigation({ screen }: { screen: string }) {
   return (
     <Sidebar className="fs-sidebar">
       <SidebarHeader className="brand-header"><button className="mobile-nav-close" aria-label="Fechar menu" onClick={() => setOpenMobile(false)}><X size={20}/></button>
-        <Link href="/" aria-label="FS Soluções Tributárias — início">
-          <img src="/brand/logo-white.svg" alt="FS Soluções Tributárias" className="brand-logo" />
+        {/* Símbolo da marca + nome em texto: legível no tamanho do menu (a logo completa fica nos PDFs e materiais). */}
+        <Link href="/" className="sidebar-brand" aria-label="FS Soluções Tributárias — início" translate="no">
+          <img src="/brand/simbolo.svg" alt="" aria-hidden="true" width={41} height={46} className="sidebar-symbol" fetchPriority="high" />
+          <span className="sidebar-name" aria-hidden="true">Soluções<br />Tributárias</span>
         </Link>
         <span className="brand-caption">GESTÃO TRIBUTÁRIA</span>
       </SidebarHeader>
