@@ -18,7 +18,7 @@ Empresas que não deram procuração à FS podem ser analisadas com o próprio e
 ## Subida do agente na VPS
 `docker compose -f docker-compose.prod.yml -f docker-compose.cert.yml -f docker-compose.webhook.yml -f docker-compose.sitfis.yml -f docker-compose.cofre.yml up -d --build api worker`
 
-## Pendente de confirmação
-A documentação pública do Serpro descreve o termo assinado pelo procurador. O uso com a própria empresa como autora
-ainda não foi confirmado numa consulta real (cada consulta é cobrada). Se o Serpro recusar, a análise volta com a
-mensagem "O Serpro recusou o termo de autorização..." e nenhum dado errado é gerado.
+## Confirmado em produção (15/10/2026)
+Primeira análise real com o certificado da empresa (STARTEC, CNPJ 10.173.280/0001-93): o Serpro aceitou o termo assinado
+pela própria empresa como autora do pedido e devolveu a Situação Fiscal. Sem procuração à FS.
+Se o Serpro recusar em algum caso, a análise volta com "O Serpro recusou o termo de autorização..." e nada errado entra no parecer.
