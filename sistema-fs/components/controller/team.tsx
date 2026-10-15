@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge, Panel, Picker } from "@/components/fs/primitives";
 import { authClient } from "@/lib/auth/client";
 import { agentTaskLabels, agentTasks, can, formatPhone, normalizePhone, parseAgentTasks, roleDescriptions, roleLabels, roleOf, roleOrder, type AgentTask, type Permissions, type Role } from "@/lib/auth/roles";
+import { sectorLabels, sectors as flowSectors, type Sector } from "@/lib/fluxo/model";
 import { useController } from "./context";
 
 type Member = { id: string; name: string; email: string; role?: string | null; banned?: boolean | null; phone?: string | null; agentTasks?: string | null };
@@ -48,6 +49,17 @@ function AgentForm({ member, busy, onSave }: { member: Member; busy: boolean; on
     </form>
   );
 }
+// Setores do fluxo de etapas em que a pessoa atua. Sem nenhum marcado, atua em todos (até o administrador definir).
+function SectorPicker({ member, value, busy, onSave }: { member: Member; value: Sector[]; busy: boolean; onSave: (sectors: Sector[]) => void }) {
+  return (
+    <div className="ctrl-sectors" role="group" aria-label={`Setores de ${member.name}`}>
+      {flowSectors.map(s => (
+        <label key={s}><input type="checkbox" disabled={busy} checked={value.includes(s)} onChange={e => onSave(e.target.checked ? [...value, s] : value.filter(v => v !== s))} /> {sectorLabels[s]}</label>
+      ))}
+      <small>{value.length ? "Move cartões só nestas áreas." : "Nenhum marcado: atua em todas as áreas."}</small>
+    </div>
+  );
+}
 export function TeamSettings() {
   const { data: session } = authClient.useSession();
   const { role, allowed, notify } = useController();
@@ -59,6 +71,7 @@ export function TeamSettings() {
   const [email, setEmail] = useState("");
   const [newRole, setNewRole] = useState<Role>("operador");
   const [issued, setIssued] = useState<{ name: string; email: string; password: string } | null>(null);
+  const [memberSectors, setMemberSectors] = useState<Record<string, Sector[]>>({});
   const me = session?.user;
   const apply = useCallback((users: Member[] | null) => {
     if (users) { setMembers(users); setError(""); } else setError("Não foi possível carregar a equipe.");
@@ -66,6 +79,21 @@ export function TeamSettings() {
   }, []);
   const load = useCallback(async () => apply(await listMembers()), [apply]);
   useEffect(() => { if (!allowed.users) return; let active = true; void listMembers().then(users => { if (active) apply(users); }); return () => { active = false; }; }, [allowed.users, apply]);
+  useEffect(() => {
+    if (!allowed.users) return;
+    let active = true;
+    fetch("/api/equipe/setores", { cache: "no-store" }).then(r => (r.ok ? r.json() : { sectors: {} })).then(d => { if (active) setMemberSectors(d.sectors ?? {}); }).catch(() => {});
+    return () => { active = false; };
+  }, [allowed.users]);
+  async function saveSectors(member: Member, list: Sector[]) {
+    setBusy(`setor-${member.id}`); setError("");
+    try {
+      const res = await fetch("/api/equipe/setores", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: member.id, sectors: list }) }), data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Não foi possível salvar os setores.");
+      setMemberSectors(old => ({ ...old, [member.id]: data.sectors })); notify("Setores salvos.");
+    } catch (e) { setError(e instanceof Error ? e.message : "Não foi possível salvar os setores."); }
+    finally { setBusy(""); }
+  }
   async function run(key: string, action: () => Promise<{ error: { message?: string } | null }>, done: string) {
     setBusy(key); setError("");
     try {
@@ -160,7 +188,7 @@ export function TeamSettings() {
               {error && <p role="alert" className="ctrl-alert ctrl-inset">{error}</p>}
               <Table className="process-table">
                 <TableHeader>
-                  <TableRow>{["Pessoa", "Perfil", "WhatsApp e atribuições no agente", "Situação", ""].map((t, i) => <TableHead key={i}>{t}</TableHead>)}</TableRow>
+                  <TableRow>{["Pessoa", "Perfil", "Setores no fluxo", "WhatsApp e atribuições no agente", "Situação", ""].map((t, i) => <TableHead key={i}>{t}</TableHead>)}</TableRow>
                 </TableHeader>
                 <TableBody>
                   {members.map(m => {
@@ -171,6 +199,7 @@ export function TeamSettings() {
                         <TableCell>
                           {self ? roleLabels[current] : <Picker label={`Perfil de ${m.name}`} value={roleLabels[current]} options={roleOrder.map(r => roleLabels[r])} onChange={label => { const next = labelToRole(label); if (next !== current) void run(`perfil-${m.id}`, () => authClient.admin.setRole({ userId: m.id, role: next }), "Perfil atualizado."); }} />}
                         </TableCell>
+                        <TableCell><SectorPicker member={m} value={memberSectors[m.id] ?? []} busy={!!busy} onSave={list => void saveSectors(m, list)} /></TableCell>
                         <TableCell><AgentForm member={m} busy={!!busy} onSave={data => run(`agente-${m.id}`, () => authClient.admin.updateUser({ userId: m.id, data }), "WhatsApp e atribuições salvos.")} /></TableCell>
                         <TableCell><Badge>{m.banned ? "Desativado" : "Ativo"}</Badge></TableCell>
                         <TableCell>

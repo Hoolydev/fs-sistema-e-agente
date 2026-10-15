@@ -4,6 +4,7 @@ import { InstallApp } from "@/components/pwa/install-app";
 import "./responsive.css";
 import "./diagnostico.css";
 import "./comercial.css";
+import "./fluxo.css";
 import "./reading.css";
 
 export const metadata: Metadata = {

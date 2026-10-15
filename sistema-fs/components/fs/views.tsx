@@ -2,6 +2,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import CommercialWorkspace from "@/components/comercial/workspace";
+import { FlowBoard } from "@/components/fluxo/board";
+import type { FlowCard } from "@/lib/fluxo/model";
 import { TeamSettings } from "@/components/controller/team";
 import { useController } from "@/components/controller/context";
 import { deadlineQueue } from "@/lib/controller/metrics";
@@ -264,11 +266,27 @@ function Indicators() {
     </>
   );
 }
+// Processo mais recente de um CNPJ, para mostrar número e contagem no cartão do quadro.
+function latestProcess(processes: ControllerProcess[], cnpj: string) {
+  return processes.filter((p) => p.cnpj === cnpj).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+}
+function ProcessChips({ process }: { process?: ControllerProcess }) {
+  if (!process) return <div className="flow-card-extra"><span className="warn">Sem processo no Controller</span></div>;
+  const days = daysUntil(process.deadline), late = days !== null && days < 0 && awaitingDispatch(process);
+  return (
+    <div className="flow-card-extra">
+      <span>{process.processNumber || "Sem nº de processo"}</span>
+      {process.deadline && awaitingDispatch(process) && <span className={late ? "late" : days !== null && days <= 7 ? "warn" : ""}>{late ? `contagem encerrada há ${-days!} d` : `contagem ${formatDay(process.deadline)}`}</span>}
+      {process.reviewState !== "aprovado" && <span className="warn">{reviewLabels[process.reviewState]}</span>}
+    </div>
+  );
+}
 function ControllerView() {
   const { processes, metrics, allowed, inbox, open, notify, loading, error } = useController();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("Todos os status");
   const [tab, setTab] = useState("todos");
+  const [view, setView] = useState("etapas");
   if (loading || error) return <DataState />;
   const term = searchKey(query);
   const rows = processes.filter((p) =>
@@ -279,6 +297,17 @@ function ControllerView() {
   return (
     <>
       <Summary items={overview(metrics, allowed.review, inbox.length)} />
+      <Tabs value={view} onValueChange={setView} className="flow-tabs">
+        <TabsList>
+          <TabsTrigger value="etapas">Etapas (quadro)</TabsTrigger>
+          <TabsTrigger value="processos">Processos e prazos</TabsTrigger>
+        </TabsList>
+      </Tabs>
+      {view === "etapas" ? (
+        <Panel title="Etapas do Controller" subtitle="Do protocolo ao despacho; na última subetapa o revisor envia o cliente ao Jurídico">
+          <FlowBoard sector="controller" refreshKey={processes.length} extra={(card: FlowCard) => <ProcessChips process={latestProcess(processes, card.cnpj)} />} onOpen={(card: FlowCard) => { const p = latestProcess(processes, card.cnpj); if (p) open(p); }} />
+        </Panel>
+      ) : (
       <Panel
         title="Gestão de processos"
         subtitle="Procedimento administrativo e prazo — habilitação e acompanhamento na Receita Federal"
@@ -312,6 +341,7 @@ function ControllerView() {
           <span>{metrics.lastUpdate ? `Última atualização informada: ${formatDay(metrics.lastUpdate)}` : ""}</span>
         </div>
       </Panel>
+      )}
     </>
   );
 }
@@ -341,6 +371,17 @@ function Administrative() {
           { label: "No Controller", value: String(new Set(processes.map((p) => p.cnpj)).size), note: "Empresas com processo em andamento", icon: BriefcaseBusiness },
         ]}
       />
+      <Panel title="Etapas do Cadastro" subtitle="Documentação do cliente; com tudo completo, o revisor envia o cliente ao Controller">
+        <FlowBoard
+          sector="cadastro"
+          refreshKey={`${companies.length}:${docs.length}`}
+          onOpen={(card: FlowCard) => openCompany(card.cnpj)}
+          extra={(card: FlowCard) => {
+            const checklist = documentChecklist(docs.filter((d) => d.cnpj === card.cnpj)), done = checklist.filter((i) => i.done).length;
+            return <div className="flow-card-extra"><span className={done === checklist.length ? "ok" : "warn"}>{done === checklist.length ? "Documentação completa" : `Documentos ${done} de ${checklist.length}`}</span></div>;
+          }}
+        />
+      </Panel>
       <Panel title="Base de clientes" subtitle="Empresas cadastradas; é daqui que elas seguem para o Controller" action={allowed.create ? <Button onClick={() => openCompany("nova")}><Plus size={16} />Nova empresa</Button> : undefined}>
         <div className="table-toolbar">
           <label className="search-field">
@@ -391,6 +432,14 @@ function EmptyModule({ screen }: { screen: string }) {
         <Link className="text-link" href="/controller">Abrir o Controller <ArrowRight size={14} /></Link>
       </div>
     </>
+  );
+}
+function LegalView() {
+  const { processes, open } = useController();
+  return (
+    <Panel title="Etapas do Jurídico" subtitle="Clientes enviados pelo Controller: pré-análise, análise da chefia e ajuizamento">
+      <FlowBoard sector="juridico" extra={(card: FlowCard) => <ProcessChips process={latestProcess(processes, card.cnpj)} />} onOpen={(card: FlowCard) => { const p = latestProcess(processes, card.cnpj); if (p) open(p); }} />
+    </Panel>
   );
 }
 function Approvals() {
@@ -511,8 +560,9 @@ export default function ModuleView({ screen }: { screen: string }) {
     case "controller":
       return <ControllerView />;
     case "contabilidade":
-    case "juridico":
       return <EmptyModule screen={screen} />;
+    case "juridico":
+      return <LegalView />;
     case "aprovacoes":
       return <Approvals />;
     case "relatorios":
