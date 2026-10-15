@@ -25,10 +25,15 @@ export function parseRfb(text: string, cnpj: string) {
   }
   const ignored = (title: string) => title === '' || title === 'Final do Relatório' || /^(Dados Cadastrais da Matriz|Sócios e Administradores|Certidão Emitida|Diagnóstico Fiscal na )/.test(title);
   // Registros transcritos e mostrados à parte, sem somar ao passivo: omissões, parcelamentos e arrolamento.
-  const informative = /^(Pendência - Omissão d|Parcelamento com Exigibilidade Suspensa \(|Débito com Exigibilidade Suspensa \(SICOB\)$|Processo de Arrolamento de Bens)/;
-  const rowPattern = /^(.*?)\s+(\d{2}\/\d{4}|\dº TRIM\/\d{4})\s+(\d{2}\/\d{2}\/\d{4})\s+(.*)$/;
+  // Inclui pendências sem valor no relatório: processos fiscais devedores, inscrições do sistema DIVIDA (previdenciárias)
+  // e parcelamentos com pendência (ex.: parcelas em atraso no SISPAR/SIEFPAR).
+  const informative = /^(Pendência - Omissão d|Parcelamento com Exigibilidade Suspensa \(|Débito com Exigibilidade Suspensa \(SICOB\)$|Processo de Arrolamento de Bens|Pendência - Processo Fiscal \(SIEF\)$|Pendência - Inscrição \(Sistema DIVIDA\)$|Pendência - Parcelamento \()/;
+  // Período: mês/ano, trimestre ou data completa (multas por atraso de declaração, ex.: MAED).
+  const rowPattern = /^(.*?)\s+(\d{2}\/\d{2}\/\d{4}|\d{2}\/\d{4}|\dº TRIM\/\d{4})\s+(\d{2}\/\d{2}\/\d{4})\s+(.*)$/;
+  // Linha de detalhe do débito anterior ("Notificação de lançamento: ...", "CNPJ do prestador/incorporação: ...").
+  const detailLine = /^[^\d:]{3,60}:\s+\S/;
   const tableRows = (block: string[]) => block.join('\n').replace(/\b(\dº)\s*\n\s*TRIM\//g, '$1 TRIM/').split('\n').map(x => x.trim()).filter(x => x && !x.startsWith('Receita PA/'));
-  const active: { id: string; tax: string; period: string; due: string; amounts: number[]; status: string }[] = [];
+  const active: { id: string; tax: string; period: string; due: string; amounts: number[]; status: string; notes: string[] }[] = [];
   const suspended: typeof active = [];
   const sida = new Map<string, { tax: string; date: string; process: string }>();
   const records: { section: string; text: string }[] = [];
@@ -37,20 +42,28 @@ export function parseRfb(text: string, cnpj: string) {
     if (ignored(title)) continue;
     if (title === 'Pendência - Débito (SIEF)') {
       // Exigible rows contain five monetary columns; suspended rows contain two.
+      const start = active.length;
       for (const line of tableRows(block)) {
         const match = line.match(rowPattern);
-        if (!match) throw new Error('RFB_UNPARSED_ROW');
+        if (!match) {
+          if (detailLine.test(line) && active.length > start) { active.at(-1)!.notes.push(line); continue; }
+          throw new Error('RFB_UNPARSED_ROW');
+        }
         const tokens = match[4].split(/\s+/), amounts = tokens.slice(0, 5).map(brlToCents), status = tokens.slice(5).join(' ');
         if (amounts.length !== 5 || status !== 'DEVEDOR' || amounts[1] + amounts[2] + amounts[3] !== amounts[4]) throw new Error('RFB_COMPONENT_MISMATCH');
-        active.push({ id: `RFB-DEV-${String(active.length + 1).padStart(3, '0')}`, tax: match[1], period: match[2], due: match[3], amounts, status });
+        active.push({ id: `RFB-DEV-${String(active.length + 1).padStart(3, '0')}`, tax: match[1], period: match[2], due: match[3], amounts, status, notes: [] });
       }
     } else if (title === 'Débito com Exigibilidade Suspensa (SIEF)') {
+      const start = suspended.length;
       for (const line of tableRows(block)) {
         const match = line.match(rowPattern);
-        if (!match) throw new Error('RFB_UNPARSED_ROW');
+        if (!match) {
+          if (detailLine.test(line) && suspended.length > start) { suspended.at(-1)!.notes.push(line); continue; }
+          throw new Error('RFB_UNPARSED_ROW');
+        }
         const tokens = match[4].split(/\s+/), amounts = tokens.slice(0, 2).map(brlToCents), status = tokens.slice(2).join(' ');
         if (!status || amounts.length !== 2) throw new Error('RFB_UNPARSED_ROW');
-        suspended.push({ id: `RFB-AV-${String(suspended.length + 1).padStart(3, '0')}`, tax: match[1], period: match[2], due: match[3], amounts, status });
+        suspended.push({ id: `RFB-AV-${String(suspended.length + 1).padStart(3, '0')}`, tax: match[1], period: match[2], due: match[3], amounts, status, notes: [] });
       }
     } else if (/^(Pendência - Inscrição|Inscrição com Exigibilidade Suspensa) \(SIDA\)$/.test(title)) {
       const body = block.join('\n');
@@ -62,7 +75,7 @@ export function parseRfb(text: string, cnpj: string) {
       }
       if ([...body.matchAll(/\d{2}\.\d\.\d{2}\.\d{6}-\d{2}/g)].length !== found) throw new Error('RFB_SIDA_UNPARSED_ROW');
     } else if (informative.test(title)) {
-      const text = block.filter(x => !/^(Processo Localização|Conta)$/.test(x)).join(' · ');
+      const text = block.filter(x => !/^(Processo Localização|Processo Situação Localização|Conta)$/.test(x)).join(' · ');
       if (text) records.push({ section: title, text });
     } else throw new Error(`RFB_SECTION_UNSUPPORTED: ${title}`);
   }
@@ -96,29 +109,38 @@ export function reportFromSerpro(input: { cnpj: string; rfbText: string; pgfn: u
     pgfnDebts.push({ id, origin: 'PGFN', tax: match?.tax ?? 'Não discriminado na fonte', period: 'Não informado', status, administrativeProcess: nullable(raw.numeroProcesso), judicialProcess: nullable(raw.numeroJuizo) ?? (isJudicialStatus(status) ? 'Ajuizada (número do juízo não informado na fonte)' : null), registeredAt: nullable(raw.dataInscricao), principal: null, fine: null, interest: null, charges: null, total, sourceId: 'pgfn' });
   }
   if ([...rfb.sida.keys()].some(id => !pgfnDebts.some(d => digits(d.id) === id))) throw new Error('PGFN_RFB_RECONCILIATION_REQUIRED');
-  const debts: Debt[] = [...rfb.active.map(row => ({ id: row.id, origin: 'RFB' as const, tax: row.tax, period: row.period, status: `${row.status} · vencimento ${row.due}`, administrativeProcess: null, judicialProcess: null, registeredAt: null, principal: row.amounts[1], fine: row.amounts[2], interest: row.amounts[3], charges: null, total: row.amounts[4], sourceId: 'rfb' })), ...pgfnDebts];
+  const debts: Debt[] = [...rfb.active.map(row => ({ id: row.id, origin: 'RFB' as const, tax: row.tax, period: row.period, status: `${row.status} · vencimento ${row.due}${row.notes.length ? ` · ${row.notes.join(' · ')}` : ''}`, administrativeProcess: null, judicialProcess: null, registeredAt: null, principal: row.amounts[1], fine: row.amounts[2], interest: row.amounts[3], charges: null, total: row.amounts[4], sourceId: 'rfb' })), ...pgfnDebts];
   const rfbTotal = rfb.active.reduce((sum, row) => sum + row.amounts[4], 0), pgfnTotal = pgfnDebts.reduce((sum, row) => sum + row.total, 0), upcoming = rfb.suspended.reduce((sum, row) => sum + row.amounts[1], 0);
   const bySituation = (['cobranca', 'negociada', 'suspensa', 'garantida'] as PgfnSituation[]).map(key => { const list = pgfnDebts.filter(d => pgfnSituation(d.status) === key); return { key, count: list.length, total: list.reduce((sum, d) => sum + d.total, 0) }; }).filter(g => g.count);
   const managed = bySituation.filter(g => g.key !== 'cobranca');
   // Parcelamentos e demais registros do SITFIS: transcritos e separados, nunca somados ao passivo.
   const installments = rfb.records.filter(r => r.section.startsWith('Parcelamento')), omissions = rfb.records.filter(r => r.section.startsWith('Pendência - Omissão'));
+  const lateInstallments = rfb.records.filter(r => r.section.startsWith('Pendência - Parcelamento'));
+  const lateValue = lateInstallments.reduce((sum, r) => sum + [...r.text.matchAll(/Valor em Atraso:\s*([\d.]+,\d{2})/gi)].reduce((acc, m) => acc + brlToCents(m[1]), 0), 0);
+  const fiscalProcesses = rfb.records.filter(r => r.section === 'Pendência - Processo Fiscal (SIEF)').flatMap(r => r.text.match(/\d{5}\.\d{3}\.\d{3}\/\d{4}-\d{2}/g) ?? []);
+  // Inscrições previdenciárias do sistema DIVIDA: a consulta da PGFN (Serpro) não as traz; ficam fora do total e viram pendência.
+  const pgfnNumbers = new Set(seen);
+  const dividaInscriptions = rfb.records.filter(r => r.section === 'Pendência - Inscrição (Sistema DIVIDA)').flatMap(r => [...r.text.matchAll(/Inscrição:\s*([\d.]+-\d)/g)].map(m => m[1]!)).filter(n => !pgfnNumbers.has(digits(n)));
   const installmentValue = installments.reduce((sum, r) => sum + [...r.text.matchAll(/Valor Suspenso:\s*([\d.]+,\d{2})/g)].reduce((acc, m) => acc + brlToCents(m[1]), 0), 0);
   const rfbPart = rfb.active.length ? `${money(rfbTotal)} na Receita Federal (${rfb.active.length} registros em cobrança)` : 'nenhum débito em cobrança na Receita Federal';
   const summary = [
     `Foram identificados ${money(rfbTotal + pgfnTotal)} em passivo federal: ${rfbPart} e ${money(pgfnTotal)} na PGFN (${pgfnDebts.length} inscrições ativas).`,
     rfb.suspended.length ? `A seção de exigibilidade suspensa do SITFIS contém ${rfb.suspended.length} registros com saldo de ${money(upcoming)}, apresentados separadamente conforme a situação indicada na fonte, sem somar ao passivo.` : '',
     installments.length ? `O SITFIS registra ${installments.length === 1 ? 'uma seção' : `${installments.length} seções`} de parcelamento com exigibilidade suspensa${installmentValue ? ` (valor suspenso informado na Receita: ${money(installmentValue)})` : ''}, transcritas à parte e não somadas ao passivo.` : '',
+    lateInstallments.length ? `Há parcelamento com pendência no relatório${lateValue ? ` (valor em atraso informado: ${money(lateValue)})` : ''}, transcrito à parte.` : '',
+    fiscalProcesses.length ? `O SITFIS lista ${fiscalProcesses.length} ${fiscalProcesses.length === 1 ? 'processo fiscal' : 'processos fiscais'} na Receita com situação devedor, sem valor informado no relatório; os débitos desses processos precisam ser levantados.` : '',
+    dividaInscriptions.length ? `Constam ainda ${dividaInscriptions.length} ${dividaInscriptions.length === 1 ? 'inscrição previdenciária' : 'inscrições previdenciárias'} em dívida ativa no sistema DIVIDA (${dividaInscriptions.join(', ')}) que não vêm na consulta da PGFN e não têm valor no relatório: estão fora do total e precisam ser levantadas.` : '',
     omissions.length ? `Há pendência de omissão de declaração no relatório de apoio à certidão: ${omissions.map(r => `${r.section.replace(/^Pendência - /, '').replace(/\*$/, '')}, ${r.text.split(' · ')[0].replace(/^\(Período de Apuração\)\s*/, 'período ')}`).join('; ')}.` : '',
     extinct.length ? `A PGFN retornou ainda ${extinct.length} ${extinct.length === 1 ? 'inscrição extinta, preservada' : 'inscrições extintas, preservadas'} no quadro complementar.` : '',
     managed.length ? `Das inscrições PGFN, ${managed.map(g => `${g.count} ${pgfnSituationLabels[g.key].toLowerCase()} (${money(g.total)})`).join(', ')} seguem no passivo, separadas do que está em cobrança.` : '',
   ].filter(Boolean).join(' ');
-  const pending = ['CAPAG, rating e capacidade de pagamento não fornecidos pelas fontes coletadas.', 'Composição por principal, multa, juros e encargo das inscrições PGFN não fornecida nesta resposta.', 'Faturamento e demonstrações contábeis não recebidos.', 'Modalidade, elegibilidade, condições, descontos e prazos de negociação dependem de documentação e revisão técnica.', 'Referências judiciais, garantias e histórico de acordos/rescisões não informados. Ausência de informação não significa ausência de processos.', 'Regime tributário atual a confirmar; o SITFIS informa histórico de opção pelo Simples, sem confirmar o regime posterior.'];
-  const recommendations = [...(omissions.length ? ['Regularizar a omissão de declaração apontada no SITFIS antes de solicitar nova certidão.'] : []), ...(installments.length ? ['Conferir a regularidade das parcelas dos parcelamentos listados no SITFIS e o saldo de cada um.'] : []), 'Conciliar os débitos em cobrança com pagamentos, declarações e eventuais parcelamentos.', 'Conferir separadamente os vencimentos e a situação dos registros de exigibilidade suspensa.', 'Obter composição das inscrições, CAPAG e condições oficiais disponíveis antes de simular descontos.', 'Conferir autenticidade e situação atual da certidão e levantar processos/garantias.', 'Submeter o parecer e a estratégia ao responsável técnico da FS.'];
+  const pending = ['CAPAG, rating e capacidade de pagamento não fornecidos pelas fontes coletadas.', 'Composição por principal, multa, juros e encargo das inscrições PGFN não fornecida nesta resposta.', 'Faturamento e demonstrações contábeis não recebidos.', 'Modalidade, elegibilidade, condições, descontos e prazos de negociação dependem de documentação e revisão técnica.', 'Referências judiciais, garantias e histórico de acordos/rescisões não informados. Ausência de informação não significa ausência de processos.', 'Regime tributário atual a confirmar; o SITFIS informa histórico de opção pelo Simples, sem confirmar o regime posterior.', ...(fiscalProcesses.length ? [`Valores dos processos fiscais com situação devedor (${fiscalProcesses.join(', ')}) não informados no SITFIS.`] : []), ...(dividaInscriptions.length ? [`Valores das inscrições previdenciárias do sistema DIVIDA (${dividaInscriptions.join(', ')}) não informados: fora do total.`] : [])];
+  const recommendations = [...(omissions.length ? ['Regularizar a omissão de declaração apontada no SITFIS antes de solicitar nova certidão.'] : []), ...(fiscalProcesses.length ? ['Levantar no e-CAC os débitos dos processos fiscais com situação devedor listados no SITFIS.'] : []), ...(dividaInscriptions.length ? ['Levantar no Regularize os valores das inscrições previdenciárias do sistema DIVIDA, que não vêm na consulta da PGFN.'] : []), ...(lateInstallments.length ? ['Regularizar as parcelas em atraso do parcelamento apontado no SITFIS para evitar a rescisão.'] : []), ...(installments.length ? ['Conferir a regularidade das parcelas dos parcelamentos listados no SITFIS e o saldo de cada um.'] : []), 'Conciliar os débitos em cobrança com pagamentos, declarações e eventuais parcelamentos.', 'Conferir separadamente os vencimentos e a situação dos registros de exigibilidade suspensa.', 'Obter composição das inscrições, CAPAG e condições oficiais disponíveis antes de simular descontos.', 'Conferir autenticidade e situação atual da certidão e levantar processos/garantias.', 'Submeter o parecer e a estratégia ao responsável técnico da FS.'];
   const conclusion = `${summary} Os dados suportam o levantamento e a conciliação do passivo. Não há base documental suficiente para calcular economia, entrada ou parcelas, concluir elegibilidade a transação ou propor garantia judicial. A emissão definitiva depende da revisão técnica e das pendências explicitadas.`;
   const supplements: NonNullable<DiagnosticReport['supplements']> = [];
   if (rfb.active.length) supplements.push({ title: 'Receita Federal - composição e vencimentos', note: 'Fonte: SITFIS. O principal considerado é o saldo devedor, não o valor original. Não foi informado encargo separado.', headers: ['Referência / período', 'Vencimento', 'Original', 'Saldo devedor', 'Multa', 'Juros', 'Consolidado'], rows: rfb.active.map(r => [`${r.tax} · ${r.period}`, r.due, ...r.amounts.map(money)]) });
-  if (rfb.suspended.length) supplements.push({ title: 'Receita Federal - registros fora do total em cobrança', note: `Seção “Débito com Exigibilidade Suspensa (SIEF)” da fonte. Saldo: ${money(upcoming)}. Os estados abaixo são transcritos do documento; não representam conclusão jurídica sobre suspensão. Valores separados do total em cobrança.`, headers: ['Tributo / período', 'Vencimento', 'Original', 'Saldo', 'Situação'], rows: rfb.suspended.map(r => [`${r.tax} · ${r.period}`, r.due, ...r.amounts.map(money), r.status]) });
-  if (rfb.records.length) supplements.push({ title: 'SITFIS - parcelamentos, omissões e demais registros', note: `Transcrição das seções do relatório de apoio à certidão.${installmentValue ? ` Valor suspenso em parcelamentos na Receita: ${money(installmentValue)}.` : ''} Registros apresentados à parte, sem somar ao passivo; a situação de cada parcelamento deve ser conferida.`, headers: ['Seção do SITFIS', 'Registro transcrito'], rows: rfb.records.map(r => [r.section, r.text]) });
+  if (rfb.suspended.length) supplements.push({ title: 'Receita Federal - registros fora do total em cobrança', note: `Seção “Débito com Exigibilidade Suspensa (SIEF)” da fonte. Saldo: ${money(upcoming)}. Os estados abaixo são transcritos do documento; não representam conclusão jurídica sobre suspensão. Valores separados do total em cobrança.`, headers: ['Tributo / período', 'Vencimento', 'Original', 'Saldo', 'Situação'], rows: rfb.suspended.map(r => [`${r.tax} · ${r.period}`, r.due, ...r.amounts.map(money), [r.status, ...r.notes].join(' · ')]) });
+  if (rfb.records.length) supplements.push({ title: 'SITFIS - parcelamentos, processos, omissões e demais registros', note: `Transcrição das seções do relatório de apoio à certidão.${installmentValue ? ` Valor suspenso em parcelamentos na Receita: ${money(installmentValue)}.` : ''}${lateValue ? ` Valor em atraso em parcelamentos: ${money(lateValue)}.` : ''} Registros apresentados à parte, sem somar ao passivo; a situação de cada parcelamento deve ser conferida.`, headers: ['Seção do SITFIS', 'Registro transcrito'], rows: rfb.records.map(r => [r.section, r.text]) });
   if (managed.length) supplements.push({ title: 'PGFN - inscrições ativas por situação', note: 'Situação transcrita da fonte. Inscrições negociadas, suspensas ou garantidas continuam no passivo inscrito.', headers: ['Situação', 'Inscrições', 'Valor consolidado'], rows: bySituation.map(g => [pgfnSituationLabels[g.key], String(g.count), money(g.total)]) });
   if (extinct.length) supplements.push({ title: 'PGFN - inscrições extintas', note: 'Registros retornados na mesma consulta. Excluídos do conjunto de inscrições ativas; saldo zero informado expressamente pela fonte.', headers: ['Inscrição', 'Situação', 'Saldo retornado', 'Inscrita em'], rows: extinct });
   return validateReport({ id: input.reportId, version: input.version, mode: 'real', company: { name: rfb.name, cnpj, regime: 'Regime atual não confirmado. Ver histórico de opção no documento SITFIS.' }, generatedAt: input.collectedAt,

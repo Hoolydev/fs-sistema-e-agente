@@ -91,7 +91,22 @@ test('aceita SITFIS sem débito em cobrança na Receita e separa parcelamentos e
  assert.ok(buildOpinion(report).pages.some(p=>p.blocks.some(b=>b.type==='heading'&&b.text==='17. Conclusão')));
 });
 test('seção desconhecida ou relatório incompleto interrompem a emissão',()=>{
- assert.throws(()=>reportFromSerpro({...input,rfbText:text.replace('Débito com Exigibilidade Suspensa (SIEF)','Pendência - Parcelamento (SIEFPAR)')}),/SECTION_UNSUPPORTED/);
+ assert.throws(()=>reportFromSerpro({...input,rfbText:text.replace('Débito com Exigibilidade Suspensa (SIEF)','Pendência - Seção Inexistente (XYZ)')}),/SECTION_UNSUPPORTED/);
  assert.throws(()=>reportFromSerpro({...input,rfbText:text.replace('Final do Relatório','')}),/INCOMPLETE/);
  assert.throws(()=>reportFromSerpro({...input,rfbText:negotiated.replace('0810-PIS 20/07/2026','0810-PIS')}),/SIDA_UNPARSED/);
+});
+
+test('multa com período em data completa, linhas de detalhe, processos fiscais e inscrições previdenciárias (sistema DIVIDA)',()=>{
+ const extra=text
+  .replace('TRIM/2026 30/04/2026 150,00 100,00 20,00 5,00 125,00 DEVEDOR','TRIM/2026 30/04/2026 150,00 100,00 20,00 5,00 125,00 DEVEDOR\nNotificação de lançamento: 7042612458961\n2203-01 - MAED EFD-CONTR 16/04/2026 21/05/2026 209,06 209,06 0,00 11,51 220,57 DEVEDOR\nCNPJ do prestador/incorporação: 03.277.956/0001-23')
+  .replace('__________ Diagnóstico Fiscal na Procuradoria','Pendência - Processo Fiscal (SIEF) __________\nProcesso Situação Localização\n10875.913.567/2025-79 DEVEDOR SETOR PROC ELETRONICO\n__________ Diagnóstico Fiscal na Procuradoria')
+  .replace('Situação: ATIVA EM COBRANCA\n__________\nFinal','Situação: ATIVA EM COBRANCA\nPendência - Inscrição (Sistema DIVIDA) __________\nInscrição: 16.204.879-3 Situação: 000535 - AJUIZAMENTO / DISTRIBUICAO\nPendência - Parcelamento (SISPAR) __________\nConta\n016068697 TRANSACAO POR ADESAO\n__________\nFinal');
+ const report=reportFromSerpro({...input,rfbText:extra});
+ assert.deepEqual(summarize(report),{rfb:34557,pgfn:125000,total:159557,count:1});
+ const rfb=report.debts.filter(d=>d.origin==='RFB');
+ assert.match(rfb[0]!.status,/Notificação de lançamento: 7042612458961/); assert.equal(rfb[1]!.period,'16/04/2026'); assert.match(rfb[1]!.status,/CNPJ do prestador/);
+ assert.match(report.summary,/1 processo fiscal na Receita com situação devedor/); assert.match(report.summary,/16\.204\.879-3/); assert.match(report.summary,/parcelamento com pendência/);
+ assert.ok(report.pending.some(p=>p.includes('10875.913.567/2025-79'))); assert.ok(report.pending.some(p=>p.includes('16.204.879-3')));
+ // Linha solta (sem débito antes) continua barrando.
+ assert.throws(()=>reportFromSerpro({...input,rfbText:text.replace('Receita PA/Exerc. Dt. Vcto\n2089','Receita PA/Exerc. Dt. Vcto\nObservação: solta\n2089')}),/UNPARSED/);
 });
