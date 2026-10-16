@@ -79,6 +79,7 @@ export function buildOpinion(input: DiagnosticReport) {
   });
   const capagBasis = o?.capagDebtBasis ?? null;
   const judicialDebts = m.debts.filter(d => d.judicialProcess);
+  const toBeFiled = m.debts.filter(d => d.origin === "PGFN" && /\bA\s+SER\s+AJUIZ/i.test(d.status));
   const days = o?.deadline ? Math.ceil((Date.parse(`${o.deadline}T23:59:59-03:00`) - Date.parse(report.generatedAt)) / 86400000) : null;
   const scheduleRows = [
     ["Convencional (comparador)", s ? `${s.conventionalMonths} meses` : "Não definido", installmentText(m.conventional)],
@@ -134,6 +135,7 @@ export function buildOpinion(input: DiagnosticReport) {
       h("1. Identificação"), t(["Informação", "Levantamento"], [
         ["Razão social / CNPJ", `${report.company.name}\n${formatCnpj(report.company.cnpj)}`], ["Regime / enquadramento", report.company.regime], ["Passivo inscrito (PGFN)", `${money(debtTotal)} · ${m.totals.count} inscrições`],
         ["Com referência judicial informada", judicialDebts.length ? `${judicialDebts.length} inscrições · ${money(judicialDebts.reduce((sum, d) => sum + d.total, 0))}` : "Não informada nas fontes; não comprova ausência de execução"],
+        ...(toBeFiled.length ? [["Encaminhadas para ajuizamento (\"a ser ajuizada\")", `${toBeFiled.length} inscrições · ${money(toBeFiled.reduce((sum, d) => sum + d.total, 0))} · ainda sem execução`]] : []),
         ["Receita Federal / federal total", `${money(m.totals.rfb)} / ${money(m.totals.total)}`], ["Classificação CAPAG", report.capag.rating ?? "Não informada"],
         ["Objeto do parecer", "Diagnóstico do passivo, simulação por inscrição, desembolso e frentes de regularização."], ["Data-base / natureza", `${shortDate(report.generatedAt)} · ${report.mode === "demo" ? "Demonstração com dados fictícios" : "Análise técnica para revisão"}`],
       ]),

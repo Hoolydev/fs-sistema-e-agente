@@ -44,7 +44,8 @@ export function pgfnSituation(status: string): PgfnSituation {
   const s = status.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
   return /NEGOCIAD|PARCELAD|TRANSACIONAD/.test(s) ? "negociada" : /SUSPENS/.test(s) ? "suspensa" : /GARANTI/.test(s) ? "garantida" : "cobranca";
 }
-export const isJudicialStatus = (status: string) => /\bAJUIZADA\b/i.test(status) && !/N[AÃ]O\s+AJUIZ/i.test(status);
+// "ATIVA A SER AJUIZADA" ainda não é execução: a PGFN só encaminhou para ajuizamento.
+export const isJudicialStatus = (status: string) => /\bAJUIZADA\b/i.test(status) && !/N[AÃ]O\s+AJUIZ|\bA\s+SER\s+AJUIZ/i.test(status);
 export function summarize(report: DiagnosticReport) {
   const totalFor = (origin: "RFB" | "PGFN") => {
     if (!report.sources.some(s => s.id === origin.toLowerCase() && s.status !== "pendente")) return null;

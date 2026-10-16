@@ -110,3 +110,11 @@ test('multa com período em data completa, linhas de detalhe, processos fiscais 
  // Linha solta (sem débito antes) continua barrando.
  assert.throws(()=>reportFromSerpro({...input,rfbText:text.replace('Receita PA/Exerc. Dt. Vcto\n2089','Receita PA/Exerc. Dt. Vcto\nObservação: solta\n2089')}),/UNPARSED/);
 });
+
+test('"a ser ajuizada" não é execução; ajuizada sem número do juízo continua marcada',()=>{
+ const rows=[['2022600000100','ATIVA A SER AJUIZADA'],['2022600000291','ATIVA AJUIZADA']].map(([n,s])=>({...active,numeroInscricao:n,situacaoDescricao:s}));
+ const report=reportFromSerpro({...input,pgfn:rows});
+ const judicial=Object.fromEntries(report.debts.filter(d=>d.origin==='PGFN').map(d=>[d.status,d.judicialProcess]));
+ assert.equal(judicial['ATIVA A SER AJUIZADA'],null);
+ assert.match(String(judicial['ATIVA AJUIZADA']),/número do juízo não informado/);
+});
