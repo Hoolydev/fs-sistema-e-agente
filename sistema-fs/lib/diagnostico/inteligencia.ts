@@ -138,6 +138,10 @@ export function intelligence(report: DiagnosticReport) {
     return { total, retidos: of("retidos"), descontados: of("descontados"), simples: of("simples"), eligible, excluded, plan: eligible > 0 ? installments(eligible, 60) : null };
   };
 
+  // Para o quadro de urgência: o que está fora do parcelamento ordinário e ainda não foi negociado nem suspenso.
+  const settled = (d: Debt) => d.origin === "PGFN" && ["negociada", "suspensa"].includes(stageOf(d.status));
+  const openOutside = outsideOrdinary.map(nature => ({ nature, total: classified.filter(c => c.nature === nature && !settled(c.debt)).reduce((acc, c) => acc + c.debt.total, 0) })).filter(x => x.total);
+
   // Triagem de prazos: só aponta o que merece revisão com os autos. Nada aqui conclui prescrição.
   const sixYears = new Date(Date.UTC(base.getUTCFullYear() - 5, base.getUTCMonth(), base.getUTCDate()));
   const triage = pgfn.map(d => {
@@ -165,6 +169,7 @@ export function intelligence(report: DiagnosticReport) {
     filing: { count: filing.length, total: sum(filing) }, plainCollection: { count: plainCollection.length, total: sum(plainCollection) },
     years, ranked, concentration: { top5: top(5), top10: top(10) }, processes, competences, monthlyAverage, oldestDue: dues[0] ?? null, regimeSignal,
     divida, dividaBySituation, fiscalProcesses, omissions, lateInstallments,
+    openOutside,
     ordinary: { pgfn: ordinary("PGFN"), rfb: ordinary("RFB"), federal: ordinary(null) }, triage, certificateValidity, certificateExpired,
   };
 }
