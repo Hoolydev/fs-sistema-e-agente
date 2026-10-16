@@ -118,3 +118,15 @@ test('"a ser ajuizada" não é execução; ajuizada sem número do juízo contin
  assert.equal(judicial['ATIVA A SER AJUIZADA'],null);
  assert.match(String(judicial['ATIVA AJUIZADA']),/número do juízo não informado/);
 });
+
+test('omissão sem prefixo "Pendência", certidão negativa e parcelas em atraso do Simples (caso T & V)',()=>{
+ const extra=text
+  .replace('Dados Cadastrais da Matriz __________','Certidão Emitida __________\nCertidão Negativa: 4B01.EB9D.66A2.5DA6 Emissão: 08/09/2019 Data de Validade: 06/03/2020\r\nDados Cadastrais da Matriz __________')
+  .replace('Pendência - Débito (SIEF) __________','Omissão de DIRF __________\n(Ano de Retenção) 2024\nPendência - Parcelamento (PARCSN/PARCMEI) __________\nSIMPLES NACIONAL - EM PARCELAMENTO Parcelas em atraso\n6\nPendência - Débito (SIEF) __________');
+ const report=reportFromSerpro({...input,rfbText:extra});
+ assert.match(report.summary,/omissão de declaração no relatório de apoio à certidão: Omissão de DIRF, ano de retenção 2024/);
+ assert.match(report.summary,/6 parcelas em atraso/);
+ assert.match(report.opinion!.certificateNote,/^O SITFIS registra certidão negativa: 4B01\.EB9D\.66A2\.5DA6 Emissão: 08\/09\/2019 Data de Validade: 06\/03\/2020\./);
+ const text2=JSON.stringify(buildOpinion(report).pages);
+ assert.match(text2,/Parcelamento PARCSN\/PARCMEI com 6 parcelas em atraso/); assert.match(text2,/Omissão de DIRF \(ano de retenção 2024\)/); assert.match(text2,/Certidão vencida/);
+});

@@ -89,6 +89,8 @@ export function buildOpinion(input: DiagnosticReport) {
     ix.monthlyAverage ? `Receita Federal: em ${ix.monthlyAverage.year} o principal não recolhido somou em média ${money(ix.monthlyAverage.principal)} por mês (${ix.monthlyAverage.first} a ${ix.monthlyAverage.last}). O passivo continua crescendo.` : "",
     o60.federal.excluded ? `Fora do parcelamento ordinário: ${money(o60.federal.excluded)} (retidos na fonte, descontados de segurados${o60.federal.simples ? " e Simples Nacional" : ""}). Exigem pagamento ou negociação própria.` : "",
     ix.divida.length || ix.fiscalProcesses.length ? `Sem valor na fonte e fora do total: ${[ix.divida.length ? `${ix.divida.length} inscrições previdenciárias do sistema DIVIDA (${ix.dividaBySituation.map(([k, n]) => `${n} ${k.toLowerCase()}`).join("; ")})` : "", ix.fiscalProcesses.length ? `${ix.fiscalProcesses.length} processos fiscais devedores na Receita` : ""].filter(Boolean).join(" e ")}. Levantar os valores antes de fechar a estratégia.` : "",
+    ...ix.lateInstallments.filter(l => l.parcels).map(l => `Parcelamento ${l.system} com ${l.parcels} parcelas em atraso: risco de rescisão; regularizar antes de qualquer nova negociação.`),
+    ix.omissions.length ? `Omissão de declaração: ${ix.omissions.join("; ")}. Impede a certidão até a entrega.` : "",
     ix.certificateExpired ? `Certidão: a última registrada no SITFIS venceu em ${dayBr(ix.certificateValidity!)}.` : "",
   ].filter(Boolean);
   // Com a situação de cada inscrição na PGFN, a nota judicial diz o que a fonte já informa e o que ainda falta.

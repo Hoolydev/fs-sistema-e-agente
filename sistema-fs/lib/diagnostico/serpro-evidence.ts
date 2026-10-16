@@ -27,7 +27,8 @@ export function parseRfb(text: string, cnpj: string) {
   // Registros transcritos e mostrados à parte, sem somar ao passivo: omissões, parcelamentos e arrolamento.
   // Inclui pendências sem valor no relatório: processos fiscais devedores, inscrições do sistema DIVIDA (previdenciárias)
   // e parcelamentos com pendência (ex.: parcelas em atraso no SISPAR/SIEFPAR).
-  const informative = /^(Pendência - Omissão d|Parcelamento com Exigibilidade Suspensa \(|Débito com Exigibilidade Suspensa \(SICOB\)$|Processo de Arrolamento de Bens|Pendência - Processo Fiscal \(SIEF\)$|Pendência - Inscrição \(Sistema DIVIDA\)$|Pendência - Parcelamento \()/;
+  // Omissões vêm com ou sem o prefixo "Pendência -" (ex.: "Omissão de DIRF").
+  const informative = /^((Pendência - )?Omissão d|Parcelamento com Exigibilidade Suspensa \(|Débito com Exigibilidade Suspensa \(SICOB\)$|Processo de Arrolamento de Bens|Pendência - Processo Fiscal \(SIEF\)$|Pendência - Inscrição \(Sistema DIVIDA\)$|Pendência - Parcelamento \()/;
   // Período: mês/ano, trimestre ou data completa (multas por atraso de declaração, ex.: MAED).
   const rowPattern = /^(.*?)\s+(\d{2}\/\d{2}\/\d{4}|\d{2}\/\d{4}|\dº TRIM\/\d{4})\s+(\d{2}\/\d{2}\/\d{4})\s+(.*)$/;
   // Linha de detalhe do débito anterior ("Notificação de lançamento: ...", "CNPJ do prestador/incorporação: ...").
@@ -79,7 +80,8 @@ export function parseRfb(text: string, cnpj: string) {
       if (text) records.push({ section: title, text });
     } else throw new Error(`RFB_SECTION_UNSUPPORTED: ${title}`);
   }
-  const certificate = text.match(/Certidão Positiva com Efeitos de Negativa:\s*([^\n]+)/)?.[1];
+  const certificateMatch = text.match(/Certidão (Negativa|Positiva com Efeitos de Negativa):\s*([^\n]+)/);
+  const certificate = certificateMatch ? { kind: certificateMatch[1] === 'Negativa' ? 'certidão negativa' : 'certidão positiva com efeitos de negativa', text: certificateMatch[2]!.trim() } : undefined;
   return { name: name.trim(), active, suspended, sida, certificate, records };
 }
 
@@ -114,8 +116,9 @@ export function reportFromSerpro(input: { cnpj: string; rfbText: string; pgfn: u
   const bySituation = (['cobranca', 'negociada', 'suspensa', 'garantida'] as PgfnSituation[]).map(key => { const list = pgfnDebts.filter(d => pgfnSituation(d.status) === key); return { key, count: list.length, total: list.reduce((sum, d) => sum + d.total, 0) }; }).filter(g => g.count);
   const managed = bySituation.filter(g => g.key !== 'cobranca');
   // Parcelamentos e demais registros do SITFIS: transcritos e separados, nunca somados ao passivo.
-  const installments = rfb.records.filter(r => r.section.startsWith('Parcelamento')), omissions = rfb.records.filter(r => r.section.startsWith('Pendência - Omissão'));
+  const installments = rfb.records.filter(r => r.section.startsWith('Parcelamento')), omissions = rfb.records.filter(r => /^(Pendência - )?Omissão/.test(r.section));
   const lateInstallments = rfb.records.filter(r => r.section.startsWith('Pendência - Parcelamento'));
+  const lateParcels = lateInstallments.reduce((sum, r) => sum + Number(r.text.match(/Parcelas em atraso\s*·?\s*(\d+)/i)?.[1] ?? 0), 0);
   const lateValue = lateInstallments.reduce((sum, r) => sum + [...r.text.matchAll(/Valor em Atraso:\s*([\d.]+,\d{2})/gi)].reduce((acc, m) => acc + brlToCents(m[1]), 0), 0);
   const fiscalProcesses = rfb.records.filter(r => r.section === 'Pendência - Processo Fiscal (SIEF)').flatMap(r => r.text.match(/\d{5}\.\d{3}\.\d{3}\/\d{4}-\d{2}/g) ?? []);
   // Inscrições previdenciárias do sistema DIVIDA: a consulta da PGFN (Serpro) não as traz; ficam fora do total e viram pendência.
@@ -127,10 +130,10 @@ export function reportFromSerpro(input: { cnpj: string; rfbText: string; pgfn: u
     `Foram identificados ${money(rfbTotal + pgfnTotal)} em passivo federal: ${rfbPart} e ${money(pgfnTotal)} na PGFN (${pgfnDebts.length} inscrições ativas).`,
     rfb.suspended.length ? `A seção de exigibilidade suspensa do SITFIS contém ${rfb.suspended.length} registros com saldo de ${money(upcoming)}, apresentados separadamente conforme a situação indicada na fonte, sem somar ao passivo.` : '',
     installments.length ? `O SITFIS registra ${installments.length === 1 ? 'uma seção' : `${installments.length} seções`} de parcelamento com exigibilidade suspensa${installmentValue ? ` (valor suspenso informado na Receita: ${money(installmentValue)})` : ''}, transcritas à parte e não somadas ao passivo.` : '',
-    lateInstallments.length ? `Há parcelamento com pendência no relatório${lateValue ? ` (valor em atraso informado: ${money(lateValue)})` : ''}, transcrito à parte.` : '',
+    lateInstallments.length ? `Há parcelamento com pendência no relatório${lateParcels ? ` (${lateParcels} parcelas em atraso)` : ''}${lateValue ? ` (valor em atraso informado: ${money(lateValue)})` : ''}, transcrito à parte; atraso de parcelas pode levar à rescisão.` : '',
     fiscalProcesses.length ? `O SITFIS lista ${fiscalProcesses.length} ${fiscalProcesses.length === 1 ? 'processo fiscal' : 'processos fiscais'} na Receita com situação devedor, sem valor informado no relatório; os débitos desses processos precisam ser levantados.` : '',
     dividaInscriptions.length ? `Constam ainda ${dividaInscriptions.length} ${dividaInscriptions.length === 1 ? 'inscrição previdenciária' : 'inscrições previdenciárias'} em dívida ativa no sistema DIVIDA (${dividaInscriptions.join(', ')}) que não vêm na consulta da PGFN e não têm valor no relatório: estão fora do total e precisam ser levantadas.` : '',
-    omissions.length ? `Há pendência de omissão de declaração no relatório de apoio à certidão: ${omissions.map(r => `${r.section.replace(/^Pendência - /, '').replace(/\*$/, '')}, ${r.text.split(' · ')[0].replace(/^\(Período de Apuração\)\s*/, 'período ')}`).join('; ')}.` : '',
+    omissions.length ? `Há pendência de omissão de declaração no relatório de apoio à certidão: ${omissions.map(r => `${r.section.replace(/^Pendência - /, '').replace(/\*$/, '')}, ${r.text.split(' · ')[0].replace(/^\(([^)]+)\)\s*/, (_, label: string) => `${label.toLowerCase()} `)}`).join('; ')}.` : '',
     extinct.length ? `A PGFN retornou ainda ${extinct.length} ${extinct.length === 1 ? 'inscrição extinta, preservada' : 'inscrições extintas, preservadas'} no quadro complementar.` : '',
     managed.length ? `Das inscrições PGFN, ${managed.map(g => `${g.count} ${pgfnSituationLabels[g.key].toLowerCase()} (${money(g.total)})`).join(', ')} seguem no passivo, separadas do que está em cobrança.` : '',
   ].filter(Boolean).join(' ');
@@ -148,6 +151,6 @@ export function reportFromSerpro(input: { cnpj: string; rfbText: string; pgfn: u
     sources: [{ id: 'rfb', title: 'Informações de apoio para emissão de certidão - SITFIS', provider: 'Receita Federal / Serpro Integra Contador', collectedAt: input.collectedAt, status: 'coletado', note: `Documento original preservado no acervo. SHA-256: ${input.rfbHash}. As informações PGFN do PDF foram usadas para conciliar natureza e processo, sem duplicação de valores.` }, { id: 'pgfn', title: 'Consulta Dívida Ativa - devedor', provider: 'PGFN / Serpro', collectedAt: input.collectedAt, status: 'coletado', note: `Resposta JSON preservada. SHA-256: ${input.pgfnHash}. ${pgfnDebts.length} inscrições ativas e ${extinct.length} extintas. Valores consolidados; composição não fornecida.` }],
     capag: { rating: null, amount: null, note: pending[0] }, sections: [], pending, recommendations, conclusion, supplements,
     ...(input.annexes?.length ? { annexes: input.annexes } : {}),
-    opinion: { scenario: null, capagDebtBasis: null, capagBasisNote: 'Base específica da CAPAG não recebida; não substituir pelo total desta consulta.', annualRevenue: null, revenuePeriod: 'Não informado', deadline: null, releaseDate: null, windowNote: 'Não foi consultada modalidade ou janela oficial de negociação.', rescissionNote: 'Histórico de acordos e rescisões não informado nas fontes.', judicialNote: pending[4], certificateNote: rfb.certificate ? `O SITFIS registra certidão positiva com efeitos de negativa: ${rfb.certificate}. Este registro não é nova emissão nem verificação de autenticidade; confirmar a situação atual antes de utilização.` : 'Certidão não identificada; verificar documento específico.', capagReview: 'Reunir dados contábeis e demonstração econômica para avaliação técnica. Não há conclusão de cabimento de revisão nesta etapa.', legalBasis: [], actions: recommendations.map(action => ({ action, timing: 'Antes da emissão definitiva e de qualquer adesão' })), caveats: pending, conclusion },
+    opinion: { scenario: null, capagDebtBasis: null, capagBasisNote: 'Base específica da CAPAG não recebida; não substituir pelo total desta consulta.', annualRevenue: null, revenuePeriod: 'Não informado', deadline: null, releaseDate: null, windowNote: 'Não foi consultada modalidade ou janela oficial de negociação.', rescissionNote: 'Histórico de acordos e rescisões não informado nas fontes.', judicialNote: pending[4], certificateNote: rfb.certificate ? `O SITFIS registra ${rfb.certificate.kind}: ${rfb.certificate.text}. Este registro não é nova emissão nem verificação de autenticidade; confirmar a situação atual antes de utilização.` : 'Certidão não identificada; verificar documento específico.', capagReview: 'Reunir dados contábeis e demonstração econômica para avaliação técnica. Não há conclusão de cabimento de revisão nesta etapa.', legalBasis: [], actions: recommendations.map(action => ({ action, timing: 'Antes da emissão definitiva e de qualquer adesão' })), caveats: pending, conclusion },
   });
 }

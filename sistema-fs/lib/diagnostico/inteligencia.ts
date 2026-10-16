@@ -155,13 +155,16 @@ export function intelligence(report: DiagnosticReport) {
   const records = (section: string) => (report.supplements ?? []).filter(x => x.title.startsWith("SITFIS")).flatMap(x => x.rows).filter(r => r[0] === section).map(r => r[1] ?? "");
   const divida = records("Pendência - Inscrição (Sistema DIVIDA)").flatMap(text => [...text.matchAll(/Inscrição:\s*([\d.]+-\d)\s+Situação:\s*(?:\d+\s*-\s*)?([^·]+)/g)].map(m => ({ id: m[1]!, situation: dividaLabel(m[2]!) })));
   const dividaBySituation = [...divida.reduce((map, d) => map.set(d.situation, (map.get(d.situation) ?? 0) + 1), new Map<string, number>())];
+  const sitfisRows = (report.supplements ?? []).filter(x => x.title.startsWith("SITFIS")).flatMap(x => x.rows);
+  const omissions = sitfisRows.filter(r => /^(Pendência - )?Omissão/.test(r[0] ?? "")).map(r => `${(r[0] ?? "").replace(/^Pendência - /, "").replace(/\*$/, "")} (${(r[1] ?? "").split(" · ")[0]!.replace(/^\(([^)]+)\)\s*/, (_, l: string) => `${l.toLowerCase()} `).trim()})`);
+  const lateInstallments = sitfisRows.filter(r => /^Pendência - Parcelamento/.test(r[0] ?? "")).map(r => ({ system: (r[0] ?? "").match(/\(([^)]+)\)/)?.[1] ?? "", parcels: Number((r[1] ?? "").match(/Parcelas em atraso\s*·?\s*(\d+)/i)?.[1] ?? 0) }));
   const fiscalProcesses = records("Pendência - Processo Fiscal (SIEF)").flatMap(text => text.match(/\d{5}\.\d{3}\.\d{3}\/\d{4}-\d{2}/g) ?? []);
 
   return {
     pgfnTotal, rfbTotal, natures, toConfirm, stages, execution: { count: execution.length, total: sum(execution), guaranteed: guaranteed.length, guaranteedTotal: sum(guaranteed) },
     filing: { count: filing.length, total: sum(filing) }, plainCollection: { count: plainCollection.length, total: sum(plainCollection) },
     years, ranked, concentration: { top5: top(5), top10: top(10) }, processes, competences, monthlyAverage, oldestDue: dues[0] ?? null, regimeSignal,
-    divida, dividaBySituation, fiscalProcesses,
+    divida, dividaBySituation, fiscalProcesses, omissions, lateInstallments,
     ordinary: { pgfn: ordinary("PGFN"), rfb: ordinary("RFB"), federal: ordinary(null) }, triage, certificateValidity, certificateExpired,
   };
 }
