@@ -28,7 +28,7 @@ test('concilia centavos, não soma extintas/a vencer e não inventa composição
  assert.equal(report.debts[0].principal,10000);assert.equal(report.debts[0].charges,null);
  assert.equal(report.debts[1].tax,'3551-IRPJ'); assert.equal(m.discount,null);assert.equal(m.final,null);assert.equal(m.entry,null);
  assert.deepEqual(m.composition,[null,null,null,null]);assert.equal(report.supplements?.[1].rows[0][3],'R$ 50,00');
- const pages=buildOpinion(report).pages;assert.equal(pages.length,14);assert.ok(pages.some(p=>p.blocks.some(b=>b.type==='heading'&&b.text==='17. Conclusão')));
+ const pages=buildOpinion(report).pages;assert.equal(pages.length,13);assert.ok(pages.some(p=>p.blocks.some(b=>b.type==='heading'&&b.text==='17. Conclusão')));
 });
 test('recusa divergência de CNPJ, valor, situação e inscrição',()=>{
  assert.throws(()=>reportFromSerpro({...input,cnpj:'47733961000179'}),/TAXPAYER/);

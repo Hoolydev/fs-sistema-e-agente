@@ -1,4 +1,5 @@
 import { formatCnpj, money, pgfnSituation, summarize, validateReport, type DiagnosticReport } from "./model";
+import { dayBr, inExecution, intelligence, natureLabels, natureRules, share, stageLabels, stageOf } from "./inteligencia";
 
 export const percent = (v: number | null) => v === null ? "Não informado" : `${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
 export const shortDate = (v: string | null) => v ? new Date(v.length === 10 ? `${v}T12:00:00Z` : v).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "Não informada";
@@ -21,14 +22,14 @@ export function fiscalHealth(report: DiagnosticReport) {
   const pgfn = report.debts.filter(d => d.origin === "PGFN"), rfbDebts = report.debts.filter(d => d.origin === "RFB");
   const rfbPresence = rfbKnown ? rfbDebts.length > 0 : declaration ? declaration.hasDebts : null;
   const rfbCount = rfbKnown ? rfbDebts.length : declaration ? (declaration.hasDebts ? declaration.count : 0) : null;
-  const judicial = pgfn.filter(d => d.judicialProcess).length;
+  const judicial = pgfn.filter(inExecution).length;
   // Negociada/parcelada, suspensa ou garantida pesa menos que "em cobrança", mas nunca vale como ausência de dívida.
   const inCollection = pgfn.filter(d => pgfnSituation(d.status) === "cobranca").length, managed = pgfn.length - inCollection;
   const sourcePoints = (id: string, full: number) => ({ coletado: full, declarado: Math.floor(full / 2), demonstrativo: 0, pendente: 0 })[status(id)];
   const factors: HealthFactor[] = [
     { label: "Dívida ativa (PGFN)", max: 30, points: !pgfnKnown ? null : !pgfn.length ? 30 : !inCollection ? 15 : band(inCollection, [[2, 20], [5, 12], [10, 6]], 0), reading: !pgfnKnown ? "Fonte PGFN pendente" : !pgfn.length ? "Nenhuma inscrição ativa" : `${pgfn.length} inscrições ativas${managed ? ` · ${inCollection} em cobrança, ${managed} negociadas/suspensas/garantidas` : " em cobrança"}` },
     { label: "Débitos na Receita Federal", max: 25, points: rfbPresence === null ? null : rfbPresence === false ? 25 : rfbCount === null ? 8 : band(rfbCount, [[0, 25], [3, 15], [10, 8]], 0), reading: rfbPresence === null ? "Não avaliado: Situação Fiscal pendente de procuração" : `${!rfbPresence ? "Sem débitos em cobrança" : rfbCount === null ? "Débitos informados, quantidade não informada" : `${rfbCount} débitos em cobrança`}${declaration && status("rfb") !== "coletado" && status("rfb") !== "demonstrativo" ? " (leitura do analista)" : ""}` },
-    { label: "Cobrança judicial", max: 20, points: pgfnKnown ? (judicial === 0 ? 20 : judicial / pgfn.length <= .25 ? 12 : judicial / pgfn.length <= .5 ? 6 : 0) : null, reading: pgfnKnown ? (judicial ? `${judicial} de ${pgfn.length} inscrições com referência judicial` : "Sem referência judicial informada pela PGFN") : "Fonte PGFN pendente" },
+    { label: "Cobrança judicial", max: 20, points: pgfnKnown ? (judicial === 0 ? 20 : judicial / pgfn.length <= .25 ? 12 : judicial / pgfn.length <= .5 ? 6 : 0) : null, reading: pgfnKnown ? (judicial ? `${judicial} de ${pgfn.length} inscrições em execução fiscal` : "Sem referência judicial informada pela PGFN") : "Fonte PGFN pendente" },
     { label: "Possibilidade de certidão", max: 15, points: (pgfnKnown && inCollection > 0) || rfbPresence === true ? 0 : pgfnKnown && rfbPresence === false ? (managed ? 8 : 15) : null, reading: (pgfnKnown && inCollection > 0) || rfbPresence === true ? "Há débitos em cobrança: certidão negativa depende de regularização" : pgfnKnown && rfbPresence === false ? (managed ? "Só inscrições negociadas/suspensas/garantidas: certidão positiva com efeito de negativa depende da regularidade delas" : "Sem débitos em cobrança nas fontes") : managed ? "Inscrições PGFN negociadas/suspensas; avaliação depende da Receita Federal" : "Não avaliado sem a Receita Federal" },
     { label: "Qualidade das fontes", max: 10, points: sourcePoints("pgfn", 5) + sourcePoints("rfb", 5), reading: [["PGFN", status("pgfn")], ["Receita Federal", status("rfb")]].map(([name, s]) => `${name}: ${s === "declarado" ? "leitura do analista" : s}`).join(" · ") },
   ];
@@ -75,11 +76,24 @@ export function buildOpinion(input: DiagnosticReport) {
   const debtTotal = m.totals.pgfn, compNames = ["Principal (preservado)", "Multa", "Juros de mora", "Encargo legal"];
   const aggregate = (key: (d: DiagnosticReport["debts"][number]) => string) => [...new Set(m.debts.map(key))].map(value => {
     const found = m.debts.filter(d => key(d) === value), total = found.reduce((sum, d) => sum + d.total, 0);
-    return [value, String(found.length), money(total), percent(debtTotal ? total / debtTotal * 100 : null)];
-  });
+    return { total, row: [value, String(found.length), money(total), percent(debtTotal ? total / debtTotal * 100 : null)] };
+  }).sort((a, b) => b.total - a.total).map(x => x.row);
   const capagBasis = o?.capagDebtBasis ?? null;
-  const judicialDebts = m.debts.filter(d => d.judicialProcess);
-  const toBeFiled = m.debts.filter(d => d.origin === "PGFN" && /\bA\s+SER\s+AJUIZ/i.test(d.status));
+  const ix = intelligence(report), judicialDebts = m.debts.filter(inExecution);
+  const o60 = ix.ordinary, plan60 = (x: typeof o60.pgfn) => x.plan ? `${money(x.plan.regular)} (última ${money(x.plan.last)})` : "Sem base parcelável";
+  // O que é urgente, em uma leitura: só itens que existem nas fontes.
+  const urgent = [
+    ix.execution.count ? `Execução fiscal: ${ix.execution.count} inscrições · ${money(ix.execution.total)} (${share(ix.execution.total, ix.pgfnTotal)} da dívida ativa)${ix.execution.guaranteed ? `; ${ix.execution.guaranteed} com garantia (${money(ix.execution.guaranteedTotal)})` : "; nenhuma com garantia informada"}. Citada, a empresa tem 5 dias para pagar ou garantir (LEF, art. 8º); depois, penhora a partir de dinheiro (LEF, art. 11, I).` : "",
+    ix.filing.count ? `A ser ajuizadas: ${ix.filing.count} inscrições · ${money(ix.filing.total)}. Ainda há janela antes do ajuizamento (garantia antecipada, negociação).` : "",
+    ix.plainCollection.count ? `Em cobrança sem ajuizamento: ${ix.plainCollection.count} inscrições · ${money(ix.plainCollection.total)}, sujeitas a protesto e cadastros de inadimplentes.` : "",
+    ix.monthlyAverage ? `Receita Federal: em ${ix.monthlyAverage.year} o principal não recolhido somou em média ${money(ix.monthlyAverage.principal)} por mês (${ix.monthlyAverage.first} a ${ix.monthlyAverage.last}). O passivo continua crescendo.` : "",
+    o60.federal.excluded ? `Fora do parcelamento ordinário: ${money(o60.federal.excluded)} (retidos na fonte, descontados de segurados${o60.federal.simples ? " e Simples Nacional" : ""}). Exigem pagamento ou negociação própria.` : "",
+    ix.divida.length || ix.fiscalProcesses.length ? `Sem valor na fonte e fora do total: ${[ix.divida.length ? `${ix.divida.length} inscrições previdenciárias do sistema DIVIDA (${ix.dividaBySituation.map(([k, n]) => `${n} ${k.toLowerCase()}`).join("; ")})` : "", ix.fiscalProcesses.length ? `${ix.fiscalProcesses.length} processos fiscais devedores na Receita` : ""].filter(Boolean).join(" e ")}. Levantar os valores antes de fechar a estratégia.` : "",
+    ix.certificateExpired ? `Certidão: a última registrada no SITFIS venceu em ${dayBr(ix.certificateValidity!)}.` : "",
+  ].filter(Boolean);
+  // Com a situação de cada inscrição na PGFN, a nota judicial diz o que a fonte já informa e o que ainda falta.
+  const judicialText = ix.stages.length ? `${ix.execution.count ? `${ix.execution.count} inscrições em execução fiscal (${money(ix.execution.total)}), ${ix.execution.guaranteed ? `${ix.execution.guaranteed} com garantia informada` : "nenhuma com garantia informada"}` : "Nenhuma inscrição em execução fiscal informada pela PGFN"}${ix.filing.count ? `; ${ix.filing.count} a ser ajuizadas (${money(ix.filing.total)})` : ""}. A fonte informa a situação de cada inscrição, mas não os autos: citação, penhoras, bloqueios e prazos precisam ser levantados nos processos. Histórico de acordos e rescisões não informado.` : o?.judicialNote ?? unknown;
+  const urgentBlock: OpinionBlock[] = urgent.length ? [call("O que é urgente", urgent.map((u, i) => `${i + 1}. ${u}`).join("\n"), "red")] : [];
   const days = o?.deadline ? Math.ceil((Date.parse(`${o.deadline}T23:59:59-03:00`) - Date.parse(report.generatedAt)) / 86400000) : null;
   const scheduleRows = [
     ["Convencional (comparador)", s ? `${s.conventionalMonths} meses` : "Não definido", installmentText(m.conventional)],
@@ -88,7 +102,7 @@ export function buildOpinion(input: DiagnosticReport) {
   ];
   const hl = m.health, declaration = report.rfbDeclaration, rfbDebts = report.debts.filter(d => d.origin === "RFB"), rfbDebtCount = rfbDebts.length, rfbSource = report.sources.find(s => s.id === "rfb");
   const managedPgfn = m.debts.filter(d => pgfnSituation(d.status) !== "cobranca");
-  const pgfnDetail = !managedPgfn.length ? `${m.totals.count} inscrições ativas` : managedPgfn.length === m.totals.count ? `${m.totals.count} inscrições · todas negociadas/suspensas` : `${m.totals.count} inscrições · ${managedPgfn.length} negociadas/suspensas`;
+  const pgfnDetail = managedPgfn.length && managedPgfn.length === m.totals.count ? `${m.totals.count} inscrições · todas negociadas/suspensas` : ix.execution.count ? `${m.totals.count} inscrições · ${ix.execution.count} em execução` : !managedPgfn.length ? `${m.totals.count} inscrições ativas` : `${m.totals.count} inscrições · ${managedPgfn.length} com tratamento`;
   const healthValue = hl.score === null ? "Não avaliado" : `${hl.score}/100`, healthDetail = hl.band ? `${hl.band.label}${hl.partial ? " · parcial" : ""}` : "Fontes insuficientes";
   const rfbValue = m.totals.rfb !== null ? money(m.totals.rfb) : hl.rfbPresence ? "Há débitos" : "Pendente";
   const rfbDetail = m.totals.rfb !== null ? `${rfbDebtCount} débitos em cobrança${report.sources.find(x => x.id === "rfb")?.status === "declarado" ? " · leitura do analista" : ""}` : declaration?.hasDebts ? `${declaration.count === null ? "Quantidade" : `${declaration.count} débitos ·`} valor não informado` : "Aguardando procuração no e-CAC";
@@ -109,6 +123,7 @@ export function buildOpinion(input: DiagnosticReport) {
       p(`${report.company.name} · CNPJ ${formatCnpj(report.company.cnpj)} · Base ${shortDate(report.generatedAt)}`),
       { type: "kpis", items: openingKpis },
       { type: "charts" },
+      ...urgentBlock,
       // Com cenário, o desembolso vem logo após os gráficos e o detalhamento do índice fica no fim da abertura.
       ...(s ? [] : healthBlocks),
       h("Quadro de desembolso - o que sai do caixa"),
@@ -128,14 +143,14 @@ export function buildOpinion(input: DiagnosticReport) {
       p("Os valores são calculados em centavos. A última parcela de cada fase absorve a diferença de arredondamento, para que a soma das prestações corresponda exatamente ao saldo. A proposta efetiva deve ser conciliada com o cálculo oficial na data de adesão."),
       call("01 · Janela de adesão e liberação", `${o?.windowNote ?? unknown}\nPrazo de adesão: ${shortDate(o?.deadline ?? null)}. Liberação: ${shortDate(o?.releaseDate ?? null)}. ${days === null ? "Contagem regressiva indisponível." : days < 0 ? "Janela encerrada na data-base." : `Restam ${days} dias na data-base.`}`, "red"),
       call("02 · Verificar a data e a natureza da rescisão", o?.rescissionNote ?? unknown),
-      call("03 · Execução fiscal e garantias", o?.judicialNote ?? unknown, "green"),
+      call("03 · Execução fiscal e garantias", judicialText, ix.execution.count ? "red" : "green"),
       h("Leitura conjunta"), p("O quadro econômico indica o potencial nominal da hipótese. A decisão depende de três verificações independentes: elegibilidade para negociar, capacidade de suportar o desembolso e estratégia para a regularidade fiscal. A simulação não confirma nenhuma dessas condições por si só."),
     ] },
     { title: "PARTE I - DIAGNÓSTICO DO PASSIVO", subtitle: "Identificação, composição e distribuição dos débitos", blocks: [
       h("1. Identificação"), t(["Informação", "Levantamento"], [
         ["Razão social / CNPJ", `${report.company.name}\n${formatCnpj(report.company.cnpj)}`], ["Regime / enquadramento", report.company.regime], ["Passivo inscrito (PGFN)", `${money(debtTotal)} · ${m.totals.count} inscrições`],
-        ["Com referência judicial informada", judicialDebts.length ? `${judicialDebts.length} inscrições · ${money(judicialDebts.reduce((sum, d) => sum + d.total, 0))}` : "Não informada nas fontes; não comprova ausência de execução"],
-        ...(toBeFiled.length ? [["Encaminhadas para ajuizamento (\"a ser ajuizada\")", `${toBeFiled.length} inscrições · ${money(toBeFiled.reduce((sum, d) => sum + d.total, 0))} · ainda sem execução`]] : []),
+        ["Em execução fiscal (ajuizadas)", judicialDebts.length ? `${judicialDebts.length} inscrições · ${money(judicialDebts.reduce((sum, d) => sum + d.total, 0))}` : "Não informada nas fontes; não comprova ausência de execução"],
+        ...(ix.filing.count ? [["Encaminhadas para ajuizamento (\"a ser ajuizada\")", `${ix.filing.count} inscrições · ${money(ix.filing.total)} · ainda sem execução`]] : []),
         ["Receita Federal / federal total", `${money(m.totals.rfb)} / ${money(m.totals.total)}`], ["Classificação CAPAG", report.capag.rating ?? "Não informada"],
         ["Objeto do parecer", "Diagnóstico do passivo, simulação por inscrição, desembolso e frentes de regularização."], ["Data-base / natureza", `${shortDate(report.generatedAt)} · ${report.mode === "demo" ? "Demonstração com dados fictícios" : "Análise técnica para revisão"}`],
       ]),
@@ -148,12 +163,23 @@ export function buildOpinion(input: DiagnosticReport) {
       h("2. Composição do débito"), t(["Componente PGFN", "Valor", "% do total"], [...m.composition.map((v, i) => [compNames[i], money(v), percent(v !== null && debtTotal ? v / debtTotal * 100 : null)]), ["TOTAL CONSOLIDADO", money(debtTotal), debtTotal ? "100,00%" : "Não informado"]]),
       p("A base potencial de redução é composta pelos acréscimos elegíveis. O principal permanece preservado no cálculo. Componentes ausentes impedem a simulação da inscrição correspondente."),
       h("3. Composição por natureza, tributo e período"),
-      t(["Natureza", "Inscrições", "Valor", "% do total"], aggregate(d => /simples/i.test(d.tax) ? "Simples Nacional" : "Tributária")),
+      t(["Natureza", "Inscr.", "PGFN", "Déb.", "Receita", "Total", "%"], [...ix.natures.map(n => [natureLabels[n.nature], String(n.pgfnCount), money(n.pgfnTotal), String(n.rfbCount), money(n.rfbTotal), money(n.total), share(n.total, ix.pgfnTotal + ix.rfbTotal)]), ["TOTAL", String(m.totals.count), money(ix.pgfnTotal), String(rfbDebtCount), money(ix.rfbTotal), money(ix.pgfnTotal + ix.rfbTotal), "100,0%"]]),
+      t(["Natureza", "Regra que pesa na negociação"], ix.natures.map(n => [natureLabels[n.nature], natureRules[n.nature]])),
+      p("Classificação pelo código de receita impresso na fonte (SITFIS e PGFN). Ela define o que entra no parcelamento ordinário, o prazo máximo na transação e o que precisa ser pago à parte."),
+      ...(ix.toConfirm.length ? [call("Códigos a confirmar", ix.toConfirm.join("\n"))] : []),
     ] },
     { title: "PARTE I - DETALHAMENTO", subtitle: "Todas as inscrições, pendências na Receita Federal e referências", blocks: [
       h("3.1. Distribuição por tributo"), t(["Tributo", "Inscrições", "Valor", "% PGFN"], aggregate(d => d.tax)),
-      h("3.2. Distribuição temporal"), t(["Período do débito", "Inscrições", "Valor", "% PGFN"], aggregate(d => d.period)),
-      p("Período de apuração e data da inscrição são campos distintos. A revisão de cada crédito depende dos fatos geradores, declarações, constituição e atos de cobrança, sem concluir decadência ou prescrição somente pelo ano."),
+      h("3.2. Distribuição temporal"),
+      ...(ix.years.length ? [t(["Ano de inscrição (PGFN)", "Inscrições", "Valor", "% PGFN", "Em execução"], ix.years.map(y => [y.year, String(y.count), money(y.total), share(y.total, ix.pgfnTotal), String(y.execution)]))] : []),
+      ...(ix.competences.length ? [t(["Competência (Receita)", "Débitos", "Principal", "Total c/ multa e juros"], ix.competences.map(c => [c.period, String(c.count), money(c.principal), money(c.total)]))] : []),
+      ...(ix.regimeSignal ? [call("Sinal de regime a confirmar", ix.regimeSignal)] : []),
+      p(`Período de apuração e data da inscrição são campos distintos. A revisão de cada crédito depende dos fatos geradores, declarações, constituição e atos de cobrança, sem concluir decadência ou prescrição somente pelo ano.${ix.oldestDue ? ` O vencimento mais antigo na Receita Federal é ${dayBr(ix.oldestDue)}: a contagem de prescrição desses débitos não começa antes dele.` : ""}`),
+      ...(ix.stages.length ? [h("3.3. Situação das inscrições na PGFN"), t(["Situação", "Inscrições", "Valor", "% PGFN"], [...ix.stages.map(g => [stageLabels[g.stage], String(g.count), money(g.total), share(g.total, ix.pgfnTotal)]), ["TOTAL", String(m.totals.count), money(ix.pgfnTotal), "100,0%"]]),
+        p("Situação transcrita da PGFN. \"A ser ajuizada\" ainda não é execução fiscal: indica que a PGFN encaminhou a cobrança judicial.")] : []),
+      ...(ix.ranked.length > 5 ? [h("3.4. Concentração"), p(`As 5 maiores inscrições somam ${money(ix.concentration.top5)} (${share(ix.concentration.top5, ix.pgfnTotal)} da PGFN); as 10 maiores, ${money(ix.concentration.top10)} (${share(ix.concentration.top10, ix.pgfnTotal)}). As ${m.totals.count} inscrições vêm de ${ix.processes.length} processos administrativos.`),
+        t(["#", "Inscrição", "Tributo", "Inscrita em", "Situação", "Valor", "% PGFN"], ix.ranked.slice(0, 10).map((d, i) => [String(i + 1), d.id, d.tax, d.registeredAt ?? "Não informada", stageLabels[stageOf(d.status)], money(d.total), share(d.total, ix.pgfnTotal)])),
+        t(["Processo administrativo", "Inscrições", "Valor", "% PGFN"], ix.processes.slice(0, 5).map(([key, v]) => [key, String(v.count), money(v.total), share(v.total, ix.pgfnTotal)]))] : []),
       h("4. Detalhamento - composição de cada inscrição"),
       t(["Inscrição / data", "Tributo", "Principal", "M + J + E", "Total"], m.simulation.map(({ debt: d }) => [ `${d.id}\n${d.registeredAt ?? "Data não informada"}`, d.tax, money(d.principal), money([d.fine, d.interest, d.charges].every(v => v !== null) ? d.fine! + d.interest! + d.charges! : null), money(d.total) ])),
 
@@ -185,13 +211,27 @@ export function buildOpinion(input: DiagnosticReport) {
       h("9.1. Quadro por categoria"), t(["Categoria", "Original", "Após desconto", "Entrada", "Saldo"], [["Inscrições incluídas na simulação", money(debtTotal), money(m.final), money(m.entry?.total ?? null), money(m.balance?.total ?? null)], ["Débitos RFB (fora da simulação)", money(m.totals.rfb), "Não simulado", "Não simulado", "Não simulado"]]),
       p("Este levantamento não confirma enquadramento previdenciário específico. Quando houver créditos com limites de prazo próprios, eles devem ser separados e simulados em planos compatíveis; não se estende automaticamente o prazo geral a todas as naturezas."),
       h("9.2. Fluxo nominal por fase"), t(["Fase", "Período", "Parcela e ajuste final"], scheduleRows),
+      h("9.3. Referência: parcelamento ordinário em até 60 parcelas"),
+      t(["Valores nominais da data-base", "PGFN", "Receita Federal", "Federal"], [
+        ["Total da origem", money(o60.pgfn.total), money(o60.rfb.total), money(o60.federal.total)],
+        ["(-) Retidos na fonte", money(o60.pgfn.retidos), money(o60.rfb.retidos), money(o60.federal.retidos)],
+        ["(-) Descontados de segurados", money(o60.pgfn.descontados), money(o60.rfb.descontados), money(o60.federal.descontados)],
+        ...(o60.federal.simples ? [["(-) Simples Nacional (regime próprio)", money(o60.pgfn.simples), money(o60.rfb.simples), money(o60.federal.simples)]] : []),
+        ["(=) Base parcelável", money(o60.pgfn.eligible), money(o60.rfb.eligible), money(o60.federal.eligible)],
+        ["Parcela nominal em 60 meses", plan60(o60.pgfn), plan60(o60.rfb), plan60(o60.federal)],
+        ["Fora do parcelamento: pagar ou negociar", money(o60.pgfn.excluded), money(o60.rfb.excluded), money(o60.federal.excluded)],
+      ]),
+      p("Parcelamento ordinário: até 60 parcelas, sem redução de multa, juros ou encargo, com SELIC sobre cada parcela e deferimento pela autoridade (Lei 10.522/2002, arts. 10 e 13). Tributos retidos e descontados de terceiros são vedados (art. 14, I). Valores nominais, sem SELIC futura nem parcela mínima: é o comparador que qualquer outra via precisa superar."),
       call("Critério de decisão", "Comparar a parcela com o caixa disponível após obrigações operacionais. Prazo longo e redução nominal não comprovam sustentabilidade. A entrada integra o valor final, não é acrescentada novamente ao total.", "green"),
     ] },
     { title: "PARTE III - A VIA DE URGÊNCIA", subtitle: "Certidão e penhora de faturamento", blocks: [
       h("10. O problema da certidão"), p(o?.certificateNote ?? unknown),
-      h("11. Penhora de faturamento - análise do instrumento"), p(o?.judicialNote ?? unknown),
+      ...(ix.certificateExpired ? [call("Certidão vencida", `A última certidão registrada no SITFIS venceu em ${dayBr(ix.certificateValidity!)}. Uma nova só é possível quando cada débito estiver não vencido, em execução com penhora efetivada ou com exigibilidade suspensa (CTN, art. 206). Hoje: ${rfbDebtCount} débitos exigíveis na Receita; ${ix.execution.count - ix.execution.guaranteed} execuções sem garantia informada; ${ix.filing.count + ix.plainCollection.count} inscrições não ajuizadas sem suspensão.`, "red")] : []),
+      h("11. Penhora de faturamento - análise do instrumento"), p(judicialText),
       p("A avaliação deve identificar processos, garantias atuais, movimentações, caixa disponível e efeitos da medida pretendida. A proposta depende da análise jurídica do caso e da decisão competente. Não basta indicar um percentual de faturamento para concluir que o crédito esteja integralmente garantido."),
       call("O que este parecer não promete", "O quadro abaixo dimensiona valores mensais. Ele não equivale a uma garantia aceita, não confirma suspensão de exigibilidade e não assegura emissão automática de certidão.", "red"),
+      ...(ix.triage.length ? [h("11.1. Triagem de prazos para revisão jurídica"), t(["Inscrição", "Tributo", "Inscrita em", "Processo adm.", "Valor", "Por que revisar"], ix.triage.map(x => [x.debt.id, x.debt.tax, x.debt.registeredAt ?? "Não informada", x.debt.administrativeProcess ?? "Não informado", money(x.debt.total), x.reasons.join("; ")])),
+        p("Triagem, não conclusão: a prescrição conta da constituição definitiva do crédito (CTN, art. 174) e é interrompida pela citação e por parcelamentos. Para revisar, faltam a data de constituição (declaração, auto ou fim da fase administrativa), o histórico de parcelamentos e suspensões e, na intercorrente, a data em que a Fazenda soube da falta de bens (LEF, art. 40).")] : []),
       h("12. Dimensionamento do percentual"), p(`Receita anual de referência: ${money(o?.annualRevenue ?? null)}. Período: ${o?.revenuePeriod ?? "Não informado"}. Média mensal: ${money(m.monthlyRevenue)}. A projeção não substitui o faturamento atual.`),
       t(["% do faturamento", "Valor mensal", "Cobertura PGFN*", "Leitura"], [1, 2, 3, 5].map(rate => {
         const amount = m.monthlyRevenue === null ? null : applyRate(m.monthlyRevenue, rate * 100);
@@ -225,6 +265,9 @@ export function buildOpinion(input: DiagnosticReport) {
       p(`Goiânia, ${shortDate(report.generatedAt)}.\nFS Soluções Tributárias · Assessoria tributária e planejamento fiscal\n${report.id} · Versão ${report.version}`),
     ] },
   ];
+  // Sem cenário, a conferência do desembolso seria toda "Não informado" e a página ficaria quase vazia:
+  // os pontos de atenção (01 a 03 e a leitura conjunta) seguem na abertura, sem quebra de página.
+  if (!s) { const [attention] = pages.splice(1, 1); pages[0]!.blocks.push(h("Pontos de atenção"), ...attention!.blocks.slice(3)); }
   for (const supplement of report.supplements ?? []) {
     pages.push({ title: "EVIDÊNCIAS COMPLEMENTARES", subtitle: supplement.title, blocks: [p(supplement.note), t(supplement.headers, supplement.rows)] });
   }

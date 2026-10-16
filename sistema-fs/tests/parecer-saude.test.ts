@@ -41,7 +41,7 @@ test('leitura manual da Receita: discriminada, global e só existência', () => 
   assert.equal(onlyFlag.sources.find(s => s.id === 'rfb')?.status, 'pendente'); assert.equal(summarize(onlyFlag).rfb, null); assert.equal(onlyFlag.debts.filter(d => d.origin === 'RFB').length, 0);
   const h = fiscalHealth(onlyFlag); assert.equal(h.factors[1].points, 8); assert.equal(h.partial, false); assert.match(h.factors[1].reading, /4 débitos/);
   const opinion = buildOpinion(onlyFlag); const kpis = opinion.pages[0].blocks.find(b => b.type === 'kpis');
-  assert.ok(kpis && kpis.type === 'kpis' && kpis.items[2].value === 'Há débitos'); assert.ok(opinion.pages[2].blocks.some(b => b.type === 'callout' && /Ana informou a existência de débitos/.test(b.text)));
+  assert.ok(kpis && kpis.type === 'kpis' && kpis.items[2].value === 'Há débitos'); assert.ok(opinion.pages.find(p => p.title === 'PARTE I - DIAGNÓSTICO DO PASSIVO')!.blocks.some(b => b.type === 'callout' && /Ana informou a existência de débitos/.test(b.text)));
   assert.equal(opinion.pages.length >= 11, true);
 });
 test('topo do parecer: sem cenário mostra passivo e índice; com cenário mantém o quadro de transação', () => {
