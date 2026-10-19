@@ -37,7 +37,8 @@ const configSchema = z.object({
   MAC_STALL_AFTER_MS: z.coerce.number().int().nonnegative().default(20 * 60 * 1000),
   // Pedido na fila e o Mac sem pedir trabalho por este tempo (Mac desligado ou sem conexão): oferece o Serpro (0 desliga).
   MAC_OFFLINE_AFTER_MS: z.coerce.number().int().nonnegative().default(10 * 60 * 1000),
-  NOTIFICATIONS_POLL_MS: z.coerce.number().int().positive().default(60_000),
+  // Rede de segurança dos avisos (o sistema chama /sistema/avisos na hora). Leitura frequente impede o banco de hibernar.
+  NOTIFICATIONS_SAFETY_POLL_MS: z.coerce.number().int().min(300_000).default(1_800_000),
   TEAM_CACHE_MS: z.coerce.number().int().positive().default(60_000),
   MEDIA_MAX_BYTES: z.coerce.number().int().positive().default(3 * 1024 * 1024),
   LLM_PROVIDER: z.enum(["disabled", "openai"]).default("disabled"),

@@ -13,10 +13,25 @@ export async function deliverNotifications(platform: Platform, whatsapp: WhatsAp
   }
   return sent;
 }
-export function startNotificationPoller(platform: Platform, whatsapp: WhatsAppGateway, logger: AppLogger, intervalMs: number) {
-  let running = false;
-  const tick = async () => { if (running) return; running = true; try { await deliverNotifications(platform, whatsapp, logger); } finally { running = false; } };
-  const timer = setInterval(() => void tick(), intervalMs);
+const brasilia = (d: Date) => { const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" }).formatToParts(d).map(p => [p.type, p.value])); return { day: `${parts.year}-${parts.month}-${parts.day}`, hour: Number(parts.hour) }; };
+// O sistema chama trigger() ao criar um aviso (entrega na hora). A leitura periódica é só rede de segurança, em horário
+// comercial, e uma vez a partir das 08:00 para o resumo diário: consultar o sistema a cada minuto mantinha o banco
+// (Neon) acordado 24 h por dia. Fora disso o banco hiberna.
+export function startNotificationPoller(platform: Platform, whatsapp: WhatsAppGateway, logger: AppLogger, safetyMs: number, now = () => new Date()) {
+  let running = false, again = false, last = 0, digestDay = "";
+  const tick = async () => {
+    if (running) { again = true; return; }
+    running = true; last = now().getTime();
+    const { day, hour } = brasilia(now()); if (hour >= 8) digestDay = day;
+    try { await deliverNotifications(platform, whatsapp, logger); }
+    finally { running = false; if (again) { again = false; void tick(); } }
+  };
+  const check = () => {
+    const at = now(), { day, hour } = brasilia(at);
+    if (hour >= 8 && digestDay !== day) { void tick(); return; }
+    if (hour >= 7 && hour < 21 && at.getTime() - last >= safetyMs) void tick();
+  };
+  const timer = setInterval(check, 60_000);
   void tick();
-  return () => clearInterval(timer);
+  return { trigger: () => void tick(), check, stop: () => clearInterval(timer) };
 }

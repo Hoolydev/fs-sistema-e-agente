@@ -18,7 +18,18 @@ export async function enqueueNotification(kind: string, recipient: { id: string;
   await setupNotifications();
   if (!recipient.phone) return false;
   const inserted = await query("INSERT INTO fs_notifications (id,kind,recipient_id,recipient,phone,message,dedupe_key,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(dedupe_key) DO NOTHING RETURNING id", [randomUUID(), kind, recipient.id, recipient.name, recipient.phone, message, `${dedupeKey}:${recipient.id}`, new Date().toISOString()]);
+  if (inserted.length) await wakeAgent();
   return inserted.length > 0;
+}
+// Chama o agente para entregar já (POST /sistema/avisos). Sem isso o agente precisaria ler a caixa de saída a cada minuto,
+// o que mantém o banco acordado o dia todo. Falha aqui não perde o aviso: a leitura de segurança do agente o encontra.
+export async function wakeAgent(env: NodeJS.ProcessEnv = process.env, fetchImpl: typeof fetch = fetch) {
+  const token = env.FS_AGENT_SERVICE_TOKEN;
+  if (!token) return false;
+  try {
+    const response = await fetchImpl(`${(env.FS_AGENT_URL || "https://api.fssolucoestributarias.com.br").replace(/\/$/, "")}/sistema/avisos`, { method: "POST", headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(3000) });
+    return response.status === 202;
+  } catch { return false; }
 }
 export async function notifyReviewers(kind: string, message: string, dedupeKey: string, exceptId?: string) {
   for (const member of await alertRecipients()) if (member.id !== exceptId) await enqueueNotification(kind, member, message, dedupeKey);
@@ -28,7 +39,7 @@ export async function notifyUser(kind: string, userId: string, message: string, 
   if (member?.active && member.phone) await enqueueNotification(kind, member, message, dedupeKey);
 }
 const line = (p: ControllerProcess) => `• ${p.company} — contagem ${formatDay(p.deadline)}${p.notes ? ` (${p.notes.slice(0, 60)})` : ""}`;
-// Resumo diário das contagens: gerado uma vez por dia a partir das 08:00 (Brasília), quando o agente consulta a caixa de saída.
+// Resumo diário das contagens: gerado uma vez por dia a partir das 08:00 (Brasília), na leitura do agente logo após esse horário.
 export function digestMessage(processes: ControllerProcess[], day = today()) {
   const queue = deadlineQueue(processes);
   const overdue = queue.filter(p => (daysUntil(p.deadline, day) ?? 0) < 0), soon = queue.filter(p => { const d = daysUntil(p.deadline, day); return d !== null && d >= 0 && d <= 7; });

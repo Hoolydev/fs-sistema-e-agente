@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { digestMessage } from '../lib/avisos/store';
+import { digestMessage, wakeAgent } from '../lib/avisos/store';
 import { detectMime } from '../lib/documentos/access';
 import { formatPhone, isValidPhone, normalizePhone, parseAgentTasks } from '../lib/auth/roles';
 import type { ControllerProcess } from '../lib/controller/model';
@@ -25,4 +25,15 @@ test('resumo diário lista contagens encerradas e as que encerram em 7 dias', ()
   assert.match(message, /resumo de 30\/09\/2026/); assert.match(message, /1 processo com contagem encerrada sem despacho:\n• EMPRESA A — contagem 10\/09\/2026 \(ENCAMINHADO PARA JURÍDICO\)/);
   assert.match(message, /1 contagem encerra em até 7 dias:\n• EMPRESA B — contagem 03\/10\/2026/); assert.doesNotMatch(message, /EMPRESA C/);
   assert.equal(digestMessage([dispatched], '2026-09-30'), null);
+});
+test('aviso novo chama o agente na hora; sem token ou com falha, segue para a leitura de segurança', async () => {
+  const calls: [string, RequestInit | undefined][] = [];
+  const ok = (async (url: string, init?: RequestInit) => { calls.push([url, init]); return new Response(null, { status: 202 }); }) as typeof fetch;
+  assert.equal(await wakeAgent({ NODE_ENV: 'test', FS_AGENT_SERVICE_TOKEN: 'tok', FS_AGENT_URL: 'https://agente.test/' } as NodeJS.ProcessEnv, ok), true);
+  assert.equal(calls[0]![0], 'https://agente.test/sistema/avisos');
+  assert.equal((calls[0]![1]!.headers as Record<string, string>).authorization, 'Bearer tok');
+  assert.equal(await wakeAgent({ NODE_ENV: 'test' } as NodeJS.ProcessEnv, ok), false);
+  assert.equal(calls.length, 1);
+  const down = (async () => { throw new Error('offline'); }) as typeof fetch;
+  assert.equal(await wakeAgent({ NODE_ENV: 'test', FS_AGENT_SERVICE_TOKEN: 'tok' } as NodeJS.ProcessEnv, down), false);
 });

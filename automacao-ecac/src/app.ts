@@ -23,6 +23,8 @@ export interface AppDependencies {
   readiness?: () => Promise<boolean>;
   mac?: Omit<MacRouteDependencies, "config" | "logger">;
   sitfis?: SitfisPublisher;
+  // Entrega imediata dos avisos que o sistema acabou de gravar.
+  notifications?: { trigger: () => void };
 }
 
 export async function buildApp(dependencies: AppDependencies) {
@@ -39,6 +41,13 @@ export async function buildApp(dependencies: AppDependencies) {
   // O logger pino concreto muda o tipo genérico da instância; as rotas do Mac só usam get/post/addHook.
   if (dependencies.mac) await registerMacRoutes(app as unknown as FastifyInstance, { config, logger, ...dependencies.mac });
   // Pedido de Situação Fiscal vindo do sistema FS (mesmo token que o agente usa para falar com o sistema).
+  // O sistema avisa que gravou avisos novos: o agente lê a caixa de saída uma vez e envia (sem leitura a cada minuto).
+  app.post("/sistema/avisos", { logLevel: "warn" }, async (request, reply) => {
+    if (!bearerMatches(headerValue(request.headers.authorization), config.FS_SYSTEM_API_TOKEN)) return reply.code(401).send({ error: "unauthorized" });
+    if (!dependencies.notifications) return reply.code(503).send({ error: "notifications_not_configured" });
+    dependencies.notifications.trigger();
+    return reply.code(202).send({ status: "accepted" });
+  });
   app.post("/sistema/sitfis", { logLevel: "warn" }, async (request, reply) => {
     if (!bearerMatches(headerValue(request.headers.authorization), config.FS_SYSTEM_API_TOKEN)) return reply.code(401).send({ error: "unauthorized" });
     if (!dependencies.sitfis) return reply.code(503).send({ error: "sitfis_not_configured" });
