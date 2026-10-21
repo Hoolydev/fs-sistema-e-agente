@@ -2,7 +2,7 @@ import { readFileSync, mkdirSync, writeFileSync, existsSync, unlinkSync } from '
 import { dirname, resolve, extname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { validateReport } from '../lib/diagnostico/model';
-import { generateDiagnosticPdf } from '../lib/diagnostico/pdf';
+import { generateStrategicPdf, generateSummaryPdf } from '../lib/diagnostico/pdf-estrategico';
 import { demoReport } from '../lib/diagnostico/demo';
 
 function main() {
@@ -26,17 +26,21 @@ function main() {
   if (!demo && !report.sources.some(s => ['rfb', 'pgfn'].includes(s.id) && s.status === 'coletado')) throw new Error('Nenhuma fonte fiscal coletada; não emitir consulta real sem evidências.');
   for (const debt of report.debts) if (debt.sourceId !== debt.origin.toLowerCase()) throw new Error('Origem da dívida diverge do identificador da fonte fiscal.');
   if (report.sources.some(s => s.status === 'pendente') && !report.pending.length) throw new Error('Registre as fontes pendentes no parecer.');
-  const templateFiles = ['lib/diagnostico/model.ts', 'lib/diagnostico/opinion-schema.ts', 'lib/diagnostico/opinion.ts', 'lib/diagnostico/pdf.ts', 'public/brand/fs-horizontal.png'];
+  const templateFiles = ['lib/diagnostico/model.ts', 'lib/diagnostico/opinion-schema.ts', 'lib/diagnostico/opinion.ts', 'lib/diagnostico/inteligencia.ts', 'lib/diagnostico/estrategico.ts', 'lib/diagnostico/pdf-estrategico.ts', 'public/brand/fs-horizontal.png'];
   const fingerprint = createHash('sha256');
   for (const file of templateFiles) fingerprint.update(file).update('\0').update(readFileSync(resolve(file)));
-  const pdf = Buffer.from(generateDiagnosticPdf(report, readFileSync(resolve('public/brand/fs-horizontal.png'))));
+  const logo = readFileSync(resolve('public/brand/fs-horizontal.png'));
+  const pdf = Buffer.from(generateStrategicPdf(report, logo)), summary = Buffer.from(generateSummaryPdf(report, logo));
+  const summaryPath = destination.replace(/\.pdf$/i, '-resumo.pdf');
+  if (existsSync(summaryPath)) throw new Error('O resumo já existe. Use nova versão/nome; nenhuma emissão será sobrescrita.');
   const hash = (data: string | Buffer) => createHash('sha256').update(data).digest('hex');
-  const receipt = { template: 'FS-parecer-sistema', templateSha256: fingerprint.digest('hex'), reportId: report.id, version: report.version, mode: report.mode, inputSha256: hash(raw), pdfSha256: hash(pdf), generatedAt: new Date().toISOString() };
+  const receipt = { template: 'FS-diagnostico-estrategico', summarySha256: hash(summary), templateSha256: fingerprint.digest('hex'), reportId: report.id, version: report.version, mode: report.mode, inputSha256: hash(raw), pdfSha256: hash(pdf), generatedAt: new Date().toISOString() };
   mkdirSync(dirname(destination), { recursive: true, mode: 0o700 });
   writeFileSync(destination, pdf, { mode: 0o600, flag: 'wx' });
+  writeFileSync(summaryPath, summary, { mode: 0o600, flag: 'wx' });
   try { writeFileSync(receiptPath, JSON.stringify(receipt, null, 2) + '\n', { mode: 0o600, flag: 'wx' }); }
-  catch (error) { unlinkSync(destination); throw error; }
-  console.log(`PDF FS gerado: ${destination}\nRecibo: ${receiptPath}\nModo: ${report.mode}. Conferir fontes e apresentação antes de entregar.`);
+  catch (error) { unlinkSync(destination); unlinkSync(summaryPath); throw error; }
+  console.log(`Diagnóstico FS: ${destination}\nResumo: ${summaryPath}\nRecibo: ${receiptPath}\nModo: ${report.mode}. Conferir fontes e apresentação antes de entregar.`);
 }
 try { main(); } catch (error) {
   // Não imprimir o JSON ou os documentos fiscais nos logs.

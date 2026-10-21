@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { query } from '@/lib/comercial/store';
 import { archiveDocument, setupDocuments } from '@/lib/documentos/store';
 import { validateReport } from './model';
-import { generateDiagnosticPdf } from './pdf';
+import { generateStrategicPdf } from './pdf-estrategico';
 import { ownedBy, type Scope } from '@/lib/auth/scope';
 
 export function validateCanonicalReport(input: unknown) {
@@ -32,9 +32,10 @@ export async function archiveCanonicalReport(externalId: string, input: unknown,
     if (existing.input_sha256 !== hash) throw new Error('ARCHIVE_CONFLICT');
     return `doc_${existing.id}`;
   }
-  const content = Buffer.from(generateDiagnosticPdf(report, logo));
+  // Diagnóstico Fiscal Estratégico (padrão VOX); o resumo de 1 página sai do mesmo payload em /api/documentos/:id/resumo.
+  const content = Buffer.from(generateStrategicPdf(report, logo));
   if (content.length > 3 * 1024 * 1024) throw new Error('PDF_TOO_LARGE');
-  const id = await archiveDocument({ externalId, cnpj: report.company.cnpj, company: report.company.name, name: `Parecer FS ${report.company.cnpj} v${report.version}.pdf`, kind: 'parecer', createdAt: report.generatedAt, ownerId }, content);
+  const id = await archiveDocument({ externalId, cnpj: report.company.cnpj, company: report.company.name, name: `Diagnostico Fiscal ${report.company.cnpj} v${report.version}.pdf`, kind: 'parecer', createdAt: report.generatedAt, ownerId }, content);
   await query('INSERT INTO fs_diagnostic_reports (document_id,payload,input_sha256) VALUES ($1,$2,$3) ON CONFLICT(document_id) DO NOTHING', [id.slice(4), payload, hash]);
   const [stored] = await query('SELECT input_sha256 FROM fs_diagnostic_reports WHERE document_id=$1', [id.slice(4)]);
   if (stored.input_sha256 !== hash) throw new Error('ARCHIVE_CONFLICT');

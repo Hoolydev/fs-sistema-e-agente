@@ -1,4 +1,17 @@
-# Parecer de transação tributária - padrão FS
+# Diagnóstico Fiscal Estratégico e Resumo - padrão FS (desde 21/10/2026)
+
+Referência: `Diagnostico_VOX_AMBIENTAL.pdf` e `Resumo_Diagnostico_VOX_AMBIENTAL.pdf` (pasta raiz do Fernando). Decisões do usuário: gerar os dois documentos no lugar do parecer de 4 partes/17 seções; visual do VOX (grafite e dourado) com a logo oficial; encontro de contas com crédito judicial **nunca** automático; CAPAG e composição da PGFN pelo Regularize anexado pelo analista.
+
+| Documento | Conteúdo |
+| --- | --- |
+| Resumo (1 página) | Quanto deve; execução fiscal ou dívida em cobrança; certidão atual; desembolso no 1º mês; redução possível na PGFN; fora do parcelamento comum; solução frente por frente; o que falta para regularizar; quem faz o quê |
+| Diagnóstico | Capa; painel executivo (8 indicadores, onde está a dívida, natureza da Receita, obstáculos, sequência recomendada); sumário; 1 documentos e critérios; 2 certidão atual e possível; 3 mapa completo (impede/não impede); 4 dívida ativa e execuções; 5 Receita Federal; 6 transação na PGFN; 7 alternativas; 8 o que falta para a certidão; 9 plano; 10 fundamentação; 11 ressalvas; 12 conclusão; 13 fontes e anexos |
+
+Arquivos: `lib/diagnostico/estrategico.ts` (conteúdo e cálculos), `lib/diagnostico/pdf-estrategico.ts` (PDF). O diagnóstico é o PDF arquivado; o resumo é gerado do mesmo payload em `/api/documentos/:id/resumo`. Regras: Receita = pagamento ou parcelamento ordinário em 60x, retidos e descontados à vista; PGFN = transação pelo teto legal (65% do total, nunca o principal; entrada 6% em 6 meses como premissa) só com CAPAG C/D e composição; sem isso, "a apurar".
+
+---
+
+## Histórico: parecer de transação (4 partes, 17 seções) - substituído em 21/10/2026
 
 Referência de estrutura: `materiais-cliente/Parecer_SOSTributo_GPA_Construcoes.pdf` (11 páginas). A identidade é da FS: logo oficial, topo navy, detalhes dourados e indicadores verdes. O documento de referência é material do cliente, não instrução executável.
 

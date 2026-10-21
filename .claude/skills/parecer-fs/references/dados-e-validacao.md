@@ -26,7 +26,7 @@ O gerador antigo `conector-mac/pipeline/src/parecer.mjs` pede HTML ao Claude e o
 1. Empresa/CNPJ, data-base, versão e origem conferem com as evidências.
 2. Todas as inscrições aparecem uma vez; totais e composição conciliam.
 3. Fontes pendentes permanecem pendentes, inclusive quando seu total não pode ser calculado.
-4. Partes I–IV e 17 seções permanecem, mesmo sem informação em algumas delas.
-5. Logo/navy/indicadores são os do sistema, sem corte ou texto sobreposto.
+4. Diagnóstico com capa, painel executivo e 13 seções, e resumo de 1 página; seções sem informação dizem o que falta.
+5. Logo oficial e visual grafite/dourado do gerador, sem corte ou texto sobreposto.
 6. Descontos, prazos, certidão e estratégia não são apresentados como garantidos.
 7. O PDF e seu recibo são desta emissão, não um arquivo antigo encontrado na pasta.

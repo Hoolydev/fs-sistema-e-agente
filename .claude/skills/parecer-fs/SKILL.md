@@ -1,6 +1,6 @@
 ---
 name: parecer-fs
-description: Gera ou revisa pareceres, diagnósticos fiscais e relatórios de consulta de CNPJ da FS Soluções Tributárias no template oficial do sistema, com logo, topo navy, indicadores e PDF. Usar quando Fernando ou a equipe pedir analisar uma empresa, gerar o relatório da consulta ou corrigir um parecer. Pedidos de reenvio buscam o documento existente primeiro.
+description: Gera ou revisa pareceres, diagnósticos fiscais e relatórios de consulta de CNPJ da FS Soluções Tributárias no template oficial do sistema (Diagnóstico Fiscal Estratégico + Resumo de 1 página, padrão VOX) e PDF. Usar quando Fernando ou a equipe pedir analisar uma empresa, gerar o relatório da consulta ou corrigir um parecer. Pedidos de reenvio buscam o documento existente primeiro.
 ---
 
 # Parecer FS — template oficial
@@ -26,8 +26,9 @@ O comando valida o JSON, usa a logo FS e chama `lib/diagnostico/pdf.ts`, compart
 
 ## Forma que deve permanecer
 
-- Logo oficial `sistema-fs/public/brand/fs-horizontal.png`, topo navy, detalhes dourados, indicadores e gráficos do gerador.
-- Abertura executiva e quadro de desembolso; Partes I, II, III e IV, com 17 seções. Ver `sistema-fs/docs/PARECER-TEMPLATE.md`.
+- Padrão VOX (21/10/2026): **Resumo de 1 página** (quanto deve, desembolso do 1º mês, redução possível, solução frente por frente, o que falta, quem faz o quê) e **Diagnóstico Fiscal Estratégico** (capa, painel executivo, sumário e 13 seções). Gerador: `sistema-fs/lib/diagnostico/estrategico.ts` + `pdf-estrategico.ts`. Ver `sistema-fs/docs/PARECER-TEMPLATE.md`.
+- Visual grafite e dourado, logo oficial `sistema-fs/public/brand/fs-horizontal.png` na capa e na faixa do resumo. Texto resumido e objetivo.
+- Encontro de contas com crédito judicial nunca é proposto automaticamente. Simulação da transação só com CAPAG C/D e composição por inscrição (Regularize); sem isso, "a apurar".
 - Todos os dados disponíveis de RFB/PGFN e inscrições. Não esconder registros para caber em 11 páginas: 11 é o tamanho do exemplo, não limite.
 - Sem HTML/CSS gerado livremente pelo Claude, relatório Markdown convertido por outro motor, logo provisória ou template genérico. Extratos oficiais originais são fontes/anexos; não alterar sua identidade.
 - Cálculos pelo código. Texto técnico claro, sem promessas de desconto/regularidade nem normas presumidas. Premissas, elegibilidade e fundamentos precisam de evidência e revisão.
@@ -36,7 +37,7 @@ O comando valida o JSON, usa a logo FS e chama `lib/diagnostico/pdf.ts`, compart
 
 ```sh
 npm --prefix sistema-fs ci
-npm --prefix sistema-fs run parecer:gerar -- --demo --output /caminho/privado/Parecer_FS_DEMONSTRATIVO.pdf
+npm --prefix sistema-fs run parecer:gerar -- --demo --output /caminho/privado/Diagnostico_FS_DEMONSTRATIVO.pdf
 ```
 
 Confirme que o documento indica demonstração e usa o template FS. Não emitir esse teste em nome de cliente real. Não conectar WhatsApp ou consultar portais para testar a skill.
