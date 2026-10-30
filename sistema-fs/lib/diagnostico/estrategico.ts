@@ -259,7 +259,7 @@ export function strategicModel(input: DiagnosticReport) {
 
   return {
     report, ix, tx, cert, certValid, baseBr, company: report.company.name, cnpj: formatCnpj(report.company.cnpj), emission: base.toLocaleDateString("pt-BR", { day: "numeric", month: "long", year: "numeric", timeZone: "America/Sao_Paulo" }),
-    summaryKpis, fronts, steps, who, panelKpis, obstacles, sequence, documents, criteria, certRows, possible, mapGroups, whatImpedes,
+    rfbKnown, summaryKpis, fronts, steps, who, panelKpis, obstacles, sequence, documents, criteria, certRows, possible, mapGroups, whatImpedes,
     pgfnStages, pgfnTop, executionNote, triage: ix.triage.map(t => [t.debt.id, t.debt.tax, t.debt.registeredAt ?? "—", money(t.debt.total), t.reasons.join("; ")]),
     natureRows, o60, withheldTotal: rfbOutside, regimeSignal: ix.regimeSignal, txRows, rfbAlt, pgfnAlt, certPending, plan, docsNeeded, legal, caveats, conclusion,
     annexRfb, annexPgfn, sourcesRows, donut: { rfb: ix.rfbTotal, pgfnOpen: ptotal, negotiated: sum(negotiated) },

@@ -238,6 +238,7 @@ export function generateSummaryPdf(input: DiagnosticReport, logo: Uint8Array): A
   c.st(6.6, false, "#d9c49c"); doc.text("Situação atual, economia e caminho para a certidão", L + W - 5, 25.5, { align: "right" });
   c.y = 40; c.st(9, true, C.slate); doc.text(clean(m.company), L, c.y); const nw = doc.getTextWidth(clean(m.company)); c.st(7, false, C.gray); doc.text(` · CNPJ ${m.cnpj}`, L + nw, c.y); doc.text(`Data-base: ${m.baseBr}`, L + W, c.y, { align: "right" });
   c.y += 2.5; doc.setDrawColor(C.line); doc.line(L, c.y, L + W, c.y); c.y += 4;
+  if (!m.rfbKnown) c.box("Leitura preliminar", "A Situação Fiscal da Receita Federal não foi consultada (exige procuração à FS ou o certificado da empresa). Este resumo mostra só a dívida ativa na PGFN; débitos na Receita, parcelamentos e certidão ficam pendentes.", "gold");
   c.kpiGrid(m.summaryKpis, 3, 21);
   c.y += 1; c.spaced("A solução, frente por frente", L, c.y, 6.4, C.slate); c.y += 1.5; doc.setDrawColor(C.gold); doc.line(L, c.y, L + W, c.y); c.y += 2.5;
   c.table(["Frente", "Quanto deve", "Solução", "Desembolso", "Economia"], m.fronts.map(f => [`${f.name}\n${f.sub}`, f.owed, f.solution, f.outlay, f.economy]), { widths: [32, 28, 66, 32], right: [1, 3, 4], size: 6.6 });

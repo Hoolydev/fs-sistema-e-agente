@@ -24,6 +24,7 @@ test('natureza pelo código de receita: retidos e descontados separados, terceir
   assert.equal(natureOf('2203-01 - MAED EFD-CONTR').nature, 'multa');
   assert.equal(natureOf('9999-CONTRIBUICAO SENAI').nature, 'terceiros');
   assert.equal(natureOf('9998-ALGO NOVO').nature, 'outros');
+  assert.equal(natureOf('Não discriminado na fonte').nature, 'outros'); // PGFN sem SITFIS: "fonte" não é retenção
 });
 
 test('estágio da cobrança: "a ser ajuizada" não é execução, mesmo em payload antigo com referência judicial', () => {

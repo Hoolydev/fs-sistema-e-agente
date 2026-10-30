@@ -49,6 +49,8 @@ export function natureOf(tax: string): { nature: Nature; confirm: string | null 
   const code = taxCode(tax), known = code ? byCode[code] : undefined;
   if (known) return { nature: known[0], confirm: known[1] ?? null };
   const s = plain(tax);
+  // Sem tributo na fonte (PGFN sem o SITFIS): não classificar pela frase "não discriminado na fonte".
+  if (/NAO DISCRIMINADO|NAO INFORMADO/.test(s)) return { nature: "outros", confirm: null };
   const nature: Nature = /SIMPLES|\bDAS\b/.test(s) ? "simples"
     : /FONTE|IRRF|\bRET\b|CSRF|COSIRF/.test(s) ? "retidos"
     : /SEGURAD/.test(s) ? "descontados"
