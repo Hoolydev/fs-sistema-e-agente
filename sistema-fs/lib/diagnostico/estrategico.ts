@@ -134,7 +134,7 @@ export function strategicModel(input: DiagnosticReport) {
     ix.omissions.length ? `Declaração omitida: ${ix.omissions.join("; ")}.` : "",
     pendingWithoutValue ? `${pendingWithoutValue} itens sem valor no relatório (DIVIDA e processos fiscais).` : "",
   ].filter(Boolean);
-  const sequence = `${report.company.name} ${cert.kind ? (certValid ? `tem ${cert.kind.match(/\((\w+)\)/)?.[1]} válida até ${cert.valid}` : `teve a última certidão vencida em ${cert.valid}`) : "não tem certidão identificada no relatório"}${impeding ? ", e hoje uma nova emissão seria negada" : ""}. ${steps.slice(0, -1).map(([a, b]) => `${a}${b}`).join(" ")} Cumpridos esses eventos, a certidão cabível é a Positiva com Efeitos de Negativa (CPEN).`;
+  const sequence = `${report.company.name} ${cert.kind ? (certValid ? `tem ${cert.kind.match(/\((\w+)\)/)?.[1]} válida até ${cert.valid}` : `teve a última certidão vencida em ${cert.valid}`) : rfbKnown ? "não tem certidão identificada no relatório da Receita" : "não teve a certidão conferida (Receita Federal não consultada)"}${impeding ? ", e hoje uma nova emissão seria negada" : ""}. ${steps.slice(0, -1).map(([a, b]) => `${a}${b}`).join(" ")} Cumpridos esses eventos, a certidão cabível é a Positiva com Efeitos de Negativa (CPEN).`;
 
   // ---------- Seção 1: documentos ----------
   const documents = [
@@ -177,7 +177,7 @@ export function strategicModel(input: DiagnosticReport) {
   // ---------- Seção 4: PGFN ----------
   const pgfnStages = ix.stages.map(g => [stageLabels[g.stage], String(g.count), money(g.total), share(g.total, ix.pgfnTotal)]);
   const pgfnTop = ix.ranked.slice(0, 10).map(d => [d.id, d.tax, d.registeredAt ?? "—", stageLabels[stageOf(d.status)], money(d.total)]);
-  const executionNote = ix.execution.count ? `Citada na execução, a empresa tem 5 dias para pagar ou garantir (LEF, art. 8º); depois, a penhora começa pelo dinheiro (LEF, art. 11, I). ${ix.execution.guaranteed ? `${ix.execution.guaranteed} inscrições já têm garantia.` : "Nenhuma inscrição tem garantia informada."} A fonte não traz os autos: citação, penhoras e bloqueios precisam ser levantados nos processos.` : ix.filing.count ? `${ix.filing.count} inscrições estão "a ser ajuizadas": ainda há janela para negociar ou garantir antes da execução.` : "Nenhuma execução fiscal informada pela PGFN.";
+  const executionNote = ix.execution.count ? `Citada na execução, a empresa tem 5 dias para pagar ou garantir (LEF, art. 8º); depois, a penhora começa pelo dinheiro (LEF, art. 11, I). ${ix.execution.guaranteed ? `${ix.execution.guaranteed} ${ix.execution.guaranteed === 1 ? "inscrição já tem" : "inscrições já têm"} garantia.` : "Nenhuma inscrição tem garantia informada."} A fonte não traz os autos: citação, penhoras e bloqueios precisam ser levantados nos processos.` : ix.filing.count ? `${ix.filing.count} inscrições estão "a ser ajuizadas": ainda há janela para negociar ou garantir antes da execução.` : "Nenhuma execução fiscal informada pela PGFN.";
 
   // ---------- Seção 5: Receita ----------
   const natureRows = ix.natures.filter(n => n.rfbCount).map(n => [natureLabels[n.nature], String(n.rfbCount), money(n.rfbTotal), natureShort[n.nature]!]);

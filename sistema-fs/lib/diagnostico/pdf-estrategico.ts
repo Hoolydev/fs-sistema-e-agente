@@ -140,11 +140,11 @@ export function generateStrategicPdf(input: DiagnosticReport, logo: Uint8Array):
   c.spaced("Onde está a dívida", L + 4, top + 6, 6, C.slate);
   const parts = [{ name: "PGFN em cobrança", value: m.donut.pgfnOpen, color: C.red }, { name: "Receita Federal", value: m.donut.rfb, color: C.gold }, { name: "PGFN já negociada", value: m.donut.negotiated, color: "#9aa8b0" }];
   c.ring(L + 20, top + 28, parts, short(parts.reduce((a, p) => a + p.value, 0)), "PGFN + RFB");
-  parts.forEach((p, i) => { doc.setFillColor(p.color); doc.rect(L + 40, top + 16 + i * 8, 2.4, 2.4, "F"); c.st(6.6, false, C.ink); doc.text(clean(`${p.name}: ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(p.value / 100)}`), L + 44, top + 18 + i * 8); });
+  parts.forEach((p, i) => { doc.setFillColor(p.color); doc.rect(L + 40, top + 16 + i * 8, 2.4, 2.4, "F"); c.st(6.6, false, C.ink); doc.text(clean(`${p.name}: ${p.name === "Receita Federal" && !m.rfbKnown ? "pendente (não consultada)" : new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(p.value / 100)}`), L + 44, top + 18 + i * 8); });
   const rx = L + half + 3;
   c.spaced("Receita Federal por natureza", rx + 4, top + 6, 6, C.slate);
   const natures = m.natureRows.slice(0, 5), maxN = Math.max(1, ...m.natureRows.map(r => Number(r[2]!.replace(/\D/g, ""))));
-  if (!natures.length) { c.st(7, false, C.gray); doc.text(doc.splitTextToSize(m.ix.rfbTotal ? "" : "Nenhum débito em cobrança na Receita Federal na data-base.", half - 8), rx + 4, top + 16); }
+  if (!natures.length) { c.st(7, false, C.gray); doc.text(doc.splitTextToSize(!m.rfbKnown ? "Receita Federal não consultada: a Situação Fiscal exige procuração à FS ou o certificado da empresa." : "Nenhum débito em cobrança na Receita Federal na data-base.", half - 8), rx + 4, top + 16); }
   natures.forEach((r, i) => { const yy = top + 13 + i * 6.6, v = Number(r[2]!.replace(/\D/g, "")), barX = rx + 34, barW = half - 34 - 26; c.st(5.8, false, C.ink); doc.text(clean(r[3] ?? r[0]!), rx + 4, yy + 2); doc.setFillColor(v === maxN ? C.slate : C.gold); doc.rect(barX, yy - 0.2, Math.max(0.6, barW * v / maxN), 2.6, "F"); c.st(5.8, true, C.ink); doc.text(clean(r[2]!), rx + half - 4, yy + 2, { align: "right" }); });
   c.y = top + 52;
   if (m.obstacles.length) c.box("Principais obstáculos à regularidade fiscal", m.obstacles.map((o, i) => `${i + 1}. ${o}`).join(" "), "red");
@@ -162,7 +162,7 @@ export function generateStrategicPdf(input: DiagnosticReport, logo: Uint8Array):
   // 2
   c.section("2", "A última certidão e a certidão possível");
   if (m.certRows.length) { c.sub("Última certidão apresentada"); c.table(["Campo", "Informação"], m.certRows, { widths: [45], bold: r => r[0] === "Data de validade" }); }
-  else c.para("O relatório da Receita não traz certidão emitida. Conferir no e-CAC antes de qualquer uso.");
+  else c.para(m.rfbKnown ? "O relatório da Receita não traz certidão emitida. Conferir no e-CAC antes de qualquer uso." : "Certidão não conferida: a Situação Fiscal da Receita Federal não foi consultada nesta análise. Conferir no e-CAC antes de qualquer uso.");
   c.box("CND e CPEN: a diferença que importa para a empresa", `A CND (art. 205 do CTN) só é emitida quando não existe débito algum, nem parcelado ou em discussão. A CPEN (art. 206 do CTN) é emitida quando existem débitos, mas todos estão com a cobrança suspensa (parcelamento ou transação em dia, recurso pendente) ou garantidos. As duas têm o mesmo efeito prático: servem para licitação, financiamento e contratos públicos. Certidão possível para ${m.company}: ${m.possible}.`, "gray");
   // 3
   c.section("3", "Mapa completo da situação fiscal");
@@ -184,7 +184,7 @@ export function generateStrategicPdf(input: DiagnosticReport, logo: Uint8Array):
     if (m.withheldTotal) c.box("Tributos retidos e descontados: tratamento prioritário", `${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(m.withheldTotal / 100)} são valores retidos de terceiros (IRRF, contribuição descontada dos segurados) que a empresa reteve e não repassou. Não entram no parcelamento ordinário (Lei 10.522/2002, art. 14, I) e têm repercussão além da esfera tributária: devem ser pagos primeiro, em DARF próprio.`, "gold");
     c.table(["Parcelamento ordinário (referência)", "Valor"], [["Débitos da Receita em cobrança", fmt(m.o60.total)], ["(-) Retidos, descontados e Simples", fmt(m.o60.excluded)], ["(=) Base parcelável", fmt(m.o60.eligible)], ["Parcela nominal em 60 meses", m.o60.plan ? `${fmt(m.o60.plan.regular)} (última ${fmt(m.o60.plan.last)})` : "—"]], { right: [1], bold: r => r[0]!.startsWith("(=)") });
     if (m.regimeSignal) c.box("Sinal de regime a confirmar", m.regimeSignal, "gray");
-  } else c.para("Nenhum débito em cobrança na Receita Federal na data-base.");
+  } else c.para(m.rfbKnown ? "Nenhum débito em cobrança na Receita Federal na data-base." : "Receita Federal não consultada nesta análise (exige procuração à FS ou o certificado da empresa). Débitos, parcelamentos e omissões na Receita ficam pendentes; ausência de dado não significa ausência de débito.");
   // 6
   c.section("6", "Transação na PGFN");
   c.table(["Item", "Situação"], m.txRows, { widths: [50] });
@@ -218,7 +218,7 @@ export function generateStrategicPdf(input: DiagnosticReport, logo: Uint8Array):
   c.section("13", "Fontes e anexos");
   c.table(["Fonte", "Origem", "Consulta"], m.sourcesRows, { widths: [80, 60] });
   if (m.annexRfb.length) { c.sub("Anexo A: débitos na Receita Federal (SIEF)"); c.table(["Código", "Tributo", "PA", "Vencimento", "Principal", "Multa", "Juros", "Total"], m.annexRfb, { right: [4, 5, 6, 7], size: 6.2 }); }
-  if (m.annexPgfn.length) { c.sub("Anexo B: inscrições na PGFN"); c.table(["Inscrição", "Tributo", "Inscrita em", "Situação", "Valor"], m.annexPgfn, { right: [4], size: 6.2 }); }
+  if (m.annexPgfn.length && !m.mapGroups.some(g => g.title.startsWith("D."))) { c.sub("Anexo B: inscrições na PGFN"); c.table(["Inscrição", "Tributo", "Inscrita em", "Situação", "Valor"], m.annexPgfn, { right: [4], size: 6.2 }); }
   footer(c, `FS Soluções Tributárias · Diagnóstico Fiscal Estratégico · ${m.company}${demo ? " · DEMONSTRAÇÃO" : ""}`, true);
   doc.setProperties({ title: `Diagnóstico Fiscal Estratégico - ${m.company}`, subject: demo ? "Demonstração - dados fictícios" : "Diagnóstico fiscal para revisão", author: "FS Soluções Tributárias", creator: "Sistema FS" });
   return doc.output("arraybuffer");
